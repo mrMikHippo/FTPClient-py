@@ -146,7 +146,36 @@ class FTPClient:
 		
 		return b''.join(chunks)
 	
-	
+	def _communicate(self, msg):
+		n = self._send(msg)
+		if n > 0:
+			res = self._recv().decode()
+			print(res)
+			return res
+	def _pasv_transmission(self, msg):
+		# Enter to PASV mode
+		r = self._communicate(self._cmds["pasv"])
+		if r:
+			# 227 Entering Passive Mode (10,10,10,4,39,71).
+			answ = r.split()
+			if answ[0] == "227":
+				serv_port = answ[-1].strip('().').split(',')
+				serv = ".".join(serv_port[:4])
+				# Port number a*256+b ... f.e. 39*256+71
+				port = functools.reduce(lambda a, b: int(a)*256+int(b), serv_port[4:])
+				# ~ print("port:", port)		
+				
+				self._send(msg)
+				
+				# Connect and receive a message from returned address and port
+				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+				tmp_sock.connect((serv, port))
+				print(tmp_sock.recv(2048).decode())
+				tmp_sock.close()
+
+				# Receive information message
+				print(self._recv().decode())
+
 	def help(self):
 		print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
 		
@@ -171,43 +200,24 @@ class FTPClient:
 			print(self._recv().decode())
 		
 	def syst(self):
-		n = self._send(self._cmds["syst"])
-		if n > 0:
-			print(self._recv().decode())
+		self._communicate(self._cmds["syst"])
+		# ~ n = self._send(self._cmds["syst"])
+		# ~ if n > 0:
+			# ~ print(self._recv().decode())
 	
 	def stat(self):
-		n = self._send(self._cmds["stat"])
-		if n > 0:
-			print(self._recv().decode())
+		self._communicate(self._cmds["stat"])
+		# ~ n = self._send(self._cmds["stat"])
+		# ~ if n > 0:
+			# ~ print(self._recv().decode())
 		
-	def list(self, path):
+	def list(self, path=""):
 	
-		# Enter to PASV mode
-		n = self._send(self._cmds["pasv"])
-		if n > 0:
-			r = self._recv().decode()
-			print(r)
-			# 227 Entering Passive Mode (10,10,10,4,39,71).
-			answ = r.split()
-			if answ[0] == "227":
-				serv_port = answ[-1].strip('().').split(',')
-				serv = ".".join(serv_port[:4])
-				# Port number a*256+b ... f.e. 39*256+71
-				port = functools.reduce(lambda a, b: int(a)*256+int(b), serv_port[4:])
-				# ~ print("port:", port)		
-				
-				self._send(self._cmds["ls"] % path)
-				
-				# Connect and receive a message from returned address and port
-				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-				tmp_sock.connect((serv, port))
-				print(tmp_sock.recv(2048).decode())
-				tmp_sock.close()
-
-				# Receive information message
-				print(self._recv().decode())					
+		msg = self._cmds["ls"] % path
+		self._pasv_transmission(msg)
 	
-	# ~ def nlst(self, path):
+	def nlst(self, path=""):
+		self._pasv_transmission(self._cmds["nls"] % path)
 		
 	
 	
@@ -261,38 +271,43 @@ if __name__ == "__main__":
 			elif cmd == "login":
 				try:
 					user = tokens[1]
-				except:
+				except IndexError:
 					print("Usage: login <user> [passwd]")
 					continue
 				
 				try:
 					passwd = tokens[2]
-				except:
+				except IndexError:
 					passwd = ""
 				
 				ftp_cli.login(user, passwd)
 				
 				
 			elif cmd == "alogin":
-				print("Login as anonymous..")
 				ftp_cli.login("anonymous")
 			elif cmd == "userlogin":
 				ftp_cli.login("jake", "12345")
 			
 
 			elif cmd == "ls":
-				try:
-					path = tokens[1]
-				except IndexError:
-					path = "*"
 				
-				ftp_cli.list(path)						
-			elif cmd == "nls":
 				try:
-					path = tokens[1]
+					s_p = tokens[1]
 				except IndexError:
-					path = "*"
-				# ~ ftp_cli.nlst(path)	
+					ftp_cli.nlst()
+					continue
+				
+				if s_p == "-l":
+					try:
+						path = tokens[2]
+					except IndexError:
+						ftp_cli.list()
+						continue
+					else:
+						ftp_cli.list(path)
+				else:
+					ftp_cli.nlst(s_p)
+				
 			elif cmd == "syst":
 				ftp_cli.syst()				
 			elif cmd == "stat":
