@@ -145,7 +145,8 @@ class FTPClient:
 				break
 		
 		return b''.join(chunks)
-			
+	
+	
 	def help(self):
 		print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
 		
@@ -178,9 +179,36 @@ class FTPClient:
 		n = self._send(self._cmds["stat"])
 		if n > 0:
 			print(self._recv().decode())
-			
+		
+	def list(self, path):
 	
+		# Enter to PASV mode
+		n = self._send(self._cmds["pasv"])
+		if n > 0:
+			r = self._recv().decode()
+			print(r)
+			# 227 Entering Passive Mode (10,10,10,4,39,71).
+			answ = r.split()
+			if answ[0] == "227":
+				serv_port = answ[-1].strip('().').split(',')
+				serv = ".".join(serv_port[:4])
+				# Port number a*256+b ... f.e. 39*256+71
+				port = functools.reduce(lambda a, b: int(a)*256+int(b), serv_port[4:])
+				# ~ print("port:", port)		
+				
+				self._send(self._cmds["ls"] % path)
+				
+				# Connect and receive a message from returned address and port
+				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+				tmp_sock.connect((serv, port))
+				print(tmp_sock.recv(2048).decode())
+				tmp_sock.close()
+
+				# Receive information message
+				print(self._recv().decode())					
 	
+	# ~ def nlst(self, path):
+		
 	
 	
 if __name__ == "__main__":
@@ -252,34 +280,23 @@ if __name__ == "__main__":
 				ftp_cli.login("jake", "12345")
 			
 
-			# ~ elif cmd == "ls":
-								
-				# ~ try:
-					# ~ path = tokens[1]
-				# ~ except IndexError:
-					# ~ path = "*"
+			elif cmd == "ls":
+				try:
+					path = tokens[1]
+				except IndexError:
+					path = "*"
 				
-				# ~ msg = cmds["ls"] % path
-				
-				# ~ simplex_pasv(sock, msg)				
-				
-			# ~ elif cmd == "nls":
-								
-				# ~ try:
-					# ~ path = tokens[1]
-				# ~ except IndexError:
-					# ~ path = "*"
-				
-				# ~ msg = cmds["nls"] % path
-				
-				# ~ simplex_pasv(sock, msg)				
-					
+				ftp_cli.list(path)						
+			elif cmd == "nls":
+				try:
+					path = tokens[1]
+				except IndexError:
+					path = "*"
+				# ~ ftp_cli.nlst(path)	
 			elif cmd == "syst":
 				ftp_cli.syst()				
-				# ~ send_msg(sock, cmds["syst"])
 			elif cmd == "stat":
 				ftp_cli.stat()
-				# ~ send_msg(sock, cmds["stat"])
 			else:
 				print("Unknown Command")
 				# ~ msg = inpt + "\r\n"
@@ -306,11 +323,11 @@ if __name__ == "__main__":
 						
 
 		except (KeyboardInterrupt, EOFError) as e:
-			print("exit")
+			print("exit")	
 			break
 
 	# ~ send_msg(sock, cmds["quit"])
-	
+	print("Disconnect")
 	ftp_cli.disconnect()
 	# ~ sock.disconnect()
 
