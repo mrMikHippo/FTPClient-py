@@ -39,6 +39,7 @@ class MySocket:
 		return msg
 		
 		
+		
 		# ~ while bytes_recd < MSGLEN:
 			# ~ chunk = self.sock.recv(min(MSGLEN - bytes_recd, 2048))
 			# ~ if chunk == b'':
@@ -122,6 +123,7 @@ class FTPClient:
 			self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		else:
 			self._sock = sock
+		self._sock.settimeout(1)
 			
 	def help(self):
 		print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
@@ -130,33 +132,51 @@ class FTPClient:
 		print(f"Connecting to {host} ", end='')
 		self._sock.connect((host, port))
 		print("[ OK ]")
+		# ~ print(self._sock.CMSG_LEN)
 		print(self._recv())
 	
 	def disconnect(self):
 		self._sock.close()
 			
 	def login(self, user, passw=""):
-		pass
+		msg = f"USER {user}\r\n"
+		n = self._send(msg)
+		if n > 0:
+			print(self._recv())
+			pswd = f"PASS {passw}\r\n"
+			self._send(pswd)
+			print(self._recv())
 		
 	def syst(self):
 		n = self._send(self._cmds["syst"])
 		if n > 0:
-			print(self._recv())
+			print(self._recv().decode())
 	
 	def stat(self):
 		n = self._send(self._cmds["stat"])
 		if n > 0:
-			recv = self._recv()
-			print(recv)
-			# ~ if recv.split()[0] == "503":
-				# ~ print(self._recv())				
+			print(self._recv().decode())		
 	
 	def _send(self, msg):		
 		return self._sock.send(msg.encode())
 	
-	def _recv(self):		
-		return self._sock.recv(2048).decode()
+	def _recv(self):
+		chunks = []
 		
+		while True:
+			try:
+				chunk = self._sock.recv(2048)
+				chunks.append(chunk)
+				# ~ print("Add chunk:", chunk)
+				if chunk == b'':
+					break
+				
+			except socket.timeout:
+				# ~ print("E: Timed out")
+				break
+		
+		return b''.join(chunks)
+	
 	
 if __name__ == "__main__":
 	
