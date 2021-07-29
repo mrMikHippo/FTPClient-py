@@ -124,6 +124,27 @@ class FTPClient:
 		else:
 			self._sock = sock
 		self._sock.settimeout(1)
+	
+	def _send(self, msg):		
+		return self._sock.send(msg.encode())
+	
+	def _recv(self):
+		chunks = []
+		
+		while True:
+			try:
+				chunk = self._sock.recv(2048)
+				chunks.append(chunk)
+				# ~ print("Add chunk:", chunk)
+				if chunk == b'':
+					print("Chunk is empty")
+					break
+				
+			except socket.timeout:
+				# ~ print("E: Timed out")
+				break
+		
+		return b''.join(chunks)
 			
 	def help(self):
 		print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
@@ -139,13 +160,14 @@ class FTPClient:
 		self._sock.close()
 			
 	def login(self, user, passw=""):
+		print("Try login as:", user)
 		msg = f"USER {user}\r\n"
 		n = self._send(msg)
 		if n > 0:
-			print(self._recv())
-			pswd = f"PASS {passw}\r\n"
-			self._send(pswd)
-			print(self._recv())
+			print(self._recv().decode())
+			pswd_cmd = f"PASS {passw}\r\n"
+			self._send(pswd_cmd)
+			print(self._recv().decode())
 		
 	def syst(self):
 		n = self._send(self._cmds["syst"])
@@ -155,27 +177,10 @@ class FTPClient:
 	def stat(self):
 		n = self._send(self._cmds["stat"])
 		if n > 0:
-			print(self._recv().decode())		
+			print(self._recv().decode())
+			
 	
-	def _send(self, msg):		
-		return self._sock.send(msg.encode())
 	
-	def _recv(self):
-		chunks = []
-		
-		while True:
-			try:
-				chunk = self._sock.recv(2048)
-				chunks.append(chunk)
-				# ~ print("Add chunk:", chunk)
-				if chunk == b'':
-					break
-				
-			except socket.timeout:
-				# ~ print("E: Timed out")
-				break
-		
-		return b''.join(chunks)
 	
 	
 if __name__ == "__main__":
@@ -225,18 +230,28 @@ if __name__ == "__main__":
 			elif cmd == "help":
 				print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")				
 				continue
+			elif cmd == "login":
+				try:
+					user = tokens[1]
+				except:
+					print("Usage: login <user> [passwd]")
+					continue
+				
+				try:
+					passwd = tokens[2]
+				except:
+					passwd = ""
+				
+				ftp_cli.login(user, passwd)
+				
+				
 			elif cmd == "alogin":
 				print("Login as anonymous..")
-				# ~ send_msg(sock, cmds['user'] % "anonymous")
-				# ~ send_msg(sock, cmds["pass"])
 				ftp_cli.login("anonymous")
-				
-				# ~ send_msg(sock, cmds["syst"])
-				# ~ send_msg(sock, cmds["stat"])
 			elif cmd == "userlogin":
 				ftp_cli.login("jake", "12345")
-				# ~ send_msg(sock, cmds['user'] % "jake")
-				# ~ send_msg(sock, cmds["pass"] % "12345")
+			
+
 			# ~ elif cmd == "ls":
 								
 				# ~ try:
