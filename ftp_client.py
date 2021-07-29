@@ -282,15 +282,12 @@ if __name__ == "__main__":
 				
 				ftp_cli.login(user, passwd)
 				
-				
 			elif cmd == "alogin":
 				ftp_cli.login("anonymous")
 			elif cmd == "userlogin":
 				ftp_cli.login("jake", "12345")
-			
 
 			elif cmd == "ls":
-				
 				try:
 					s_p = tokens[1]
 				except IndexError:
