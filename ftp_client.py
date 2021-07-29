@@ -183,8 +183,7 @@ class FTPClient:
 		print(f"Connecting to {host} ", end='')
 		self._sock.connect((host, port))
 		print("[ OK ]")
-		# ~ print(self._sock.CMSG_LEN)
-		print(self._recv())
+		print(self._recv().decode())
 	
 	def disconnect(self):
 		self._sock.close()
@@ -201,15 +200,9 @@ class FTPClient:
 		
 	def syst(self):
 		self._communicate(self._cmds["syst"])
-		# ~ n = self._send(self._cmds["syst"])
-		# ~ if n > 0:
-			# ~ print(self._recv().decode())
 	
 	def stat(self):
 		self._communicate(self._cmds["stat"])
-		# ~ n = self._send(self._cmds["stat"])
-		# ~ if n > 0:
-			# ~ print(self._recv().decode())
 		
 	def list(self, path=""):
 	
