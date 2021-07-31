@@ -2,43 +2,12 @@ import os,sys
 import socket
 import functools
 import time
-
-
-class MySocket:
-
-	def __init__(self, sock=None):
-		if sock is None:
-			self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		else:
-			self.sock = sock
-
-	def connect(self, host, port):
-		print(f"Connecting to {host} ", end='')
-		self.sock.connect((host, port))
-		print("[ OK ]")
-
-	def disconnect(self):
-		self.sock.close()
-
-	def send(self, msg):
-		totalsent = 0
-		while totalsent < len(msg):
-			sent = self.sock.send(msg[totalsent:].encode())
-			if sent == 0:
-				raise RuntimeError("socket connection broken")
-			totalsent = totalsent + sent
-		return totalsent
-
-
-	def recv(self):
-		chunks = []
-		bytes_recd = 0
-		# ~ MSGLEN = 2048
-		msg = self.sock.recv(2048)
-		return msg
+import getpass
 
 class FTPClient:
 	_prompt = "(ftp)> "
+	_host = None
+	_timeout = 1
 
 	_cmds = {'ls': 'LIST %s\r\n',
 			'nls': 'NLST %s\r\n',
@@ -52,12 +21,29 @@ class FTPClient:
 			'help': 'HELP\r\n'
 			}
 
-	def __init__(self, sock=None):
-		if sock is None:
-			self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		else:
-			self._sock = sock
-		self._sock.settimeout(1)
+	def __init__(self, host=None):
+		self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)		
+		self.set_timeout(self._timeout)
+		if host:
+			self._host = host
+	
+	def set_timeout(self, timeout):
+		self._timeout = timeout
+		self._sock.settimeout(self._timeout)
+		# ~ print("Socket timeout set to", self._timeout)
+
+	def connect(self, host=None):		
+		if host:
+			self._host = host
+
+		self._sock.connect((self._host, 21))
+		
+		print("Connected to %s" % self._host)
+		print(self._recv())
+
+	def disconnect(self):
+		self._send_recv(self._cmds["quit"])
+		self._sock.close()
 
 	def _send(self, msg):
 		return self._sock.send(msg.encode())
@@ -71,19 +57,19 @@ class FTPClient:
 				chunks.append(chunk)
 				# ~ print("Add chunk:", chunk)
 				if chunk == b'':
-					print("Chunk is empty")
+					# ~ print("Chunk is empty")
 					break
 
 			except socket.timeout:
 				# ~ print("E: Timed out")
 				break
 
-		return b''.join(chunks)
+		return b''.join(chunks).decode().strip()
 
 	def _send_recv(self, msg):
 		n = self._send(msg)
 		if n > 0:
-			res = self._recv().decode()
+			res = self._recv()
 			print(res)
 			return res
 
@@ -118,14 +104,7 @@ class FTPClient:
 		# ~ print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
 		self._send_recv(self._cmds["help"])
 
-	def connect(self, host, port):
-		print(f"Connecting to {host} ", end='')
-		self._sock.connect((host, port))
-		print("[ OK ]")
-		print(self._recv().decode())
 
-	def disconnect(self):
-		self._sock.close()
 
 	def login(self, user, passw=""):
 		print("Try login as:", user)
@@ -138,6 +117,18 @@ class FTPClient:
 			# pswd_cmd = f"PASS {passw}\r\n"
 			# self._send(pswd_cmd)
 			# print(self._recv().decode())
+	def first_login(self):
+		user = input("Name: ")
+		
+		self._send_recv(self._cmds["user"] % user)
+		
+		pswd = getpass.getpass('Password:')
+		
+		tmp_timeout = self._timeout
+		self.set_timeout(3)		
+		self._send_recv(self._cmds["pass"] % pswd)
+		self.set_timeout(tmp_timeout)
+		
 
 	def syst(self):
 		self._send_recv(self._cmds["syst"])
@@ -163,6 +154,7 @@ class FTPClient:
 		return cmd, arg
 
 	def loop(self):
+		
 		while True:
 			try:
 				inpt = input(self._prompt)
@@ -185,12 +177,22 @@ class FTPClient:
 
 
 if __name__ == "__main__":
-	FTPClient().loop()
-	# if len(sys.argv) < 2:
-	# 	print("Usage %s <host>" % sys.argv[0])
-	# 	sys.exit()
-	#
-	# host = sys.argv[1]
+	
+	if len(sys.argv) < 2:
+		print("Usage %s <host>" % sys.argv[0])
+		sys.exit()
+	
+	host = sys.argv[1]
+	
+	ftpclient = FTPClient(host)
+	ftpclient.connect()
+	
+	ftpclient.first_login()
+	# ~ ftpclient.loop()
+	
+	ftpclient.disconnect()
+
+	
 	#
 	# ftp_cli = FTPClient()
 	# ftp_cli.connect(host, 21)
