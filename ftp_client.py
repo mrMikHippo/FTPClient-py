@@ -115,7 +115,8 @@ class FTPClient:
 			'port': 'PORT %s\r\n',	# 10,10,10,4,39,72 , where 39,72 is a port number 10056 (39*256+72)
 			'quit': 'QUIT\r\n',
 			'user': 'USER %s\r\n',
-			'pass': 'PASS %s\r\n'
+			'pass': 'PASS %s\r\n',
+			'help': 'HELP\r\n'
 			}
 
 	def __init__(self, sock=None):		
@@ -152,6 +153,7 @@ class FTPClient:
 			res = self._recv().decode()
 			print(res)
 			return res
+
 	def _pasv_transmission(self, msg):
 		# Enter to PASV mode
 		r = self._communicate(self._cmds["pasv"])
@@ -177,7 +179,8 @@ class FTPClient:
 				print(self._recv().decode())
 
 	def help(self):
-		print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
+		# ~ print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
+		self._communicate(self._cmds["help"])
 		
 	def connect(self, host, port):
 		print(f"Connecting to {host} ", end='')
@@ -259,8 +262,9 @@ if __name__ == "__main__":
 			if cmd == "quit" or cmd == "exit":
 				break
 			elif cmd == "help":
-				print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")				
-				continue
+				# ~ print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
+				# ~ ftp_cli.help()
+				print(ftp_cli._cmds)
 			elif cmd == "login":
 				try:
 					user = tokens[1]
