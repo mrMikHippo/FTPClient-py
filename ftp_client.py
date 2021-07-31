@@ -66,11 +66,12 @@ class FTPClient:
 
 		return b''.join(chunks).decode().strip()
 
-	def _send_recv(self, msg):
+	def _send_recv(self, msg, verbose=True):
 		n = self._send(msg)
 		if n > 0:
 			res = self._recv()
-			print(res)
+			if verbose:
+				print(res)
 			return res
 
 	def _pasv_transmission(self, msg):
@@ -117,6 +118,7 @@ class FTPClient:
 			# pswd_cmd = f"PASS {passw}\r\n"
 			# self._send(pswd_cmd)
 			# print(self._recv().decode())
+
 	def first_login(self):
 		user = input("Name: ")
 		
@@ -124,10 +126,21 @@ class FTPClient:
 		
 		pswd = getpass.getpass('Password:')
 		
-		tmp_timeout = self._timeout
-		self.set_timeout(3)		
-		self._send_recv(self._cmds["pass"] % pswd)
-		self.set_timeout(tmp_timeout)
+		if pswd == "" and not user == "anonymous":
+			tmp_timeout = self._timeout
+			self.set_timeout(5)
+		
+		res = self._send_recv(self._cmds["pass"] % pswd)
+		if not res.split()[0] == "230":
+			print("Login failed.")
+			return
+		
+		if pswd == "" and not user == "anonymous":
+			self.set_timeout(tmp_timeout)
+
+		
+		res = self._send_recv(self._cmds["syst"], False)
+		print("Remote system type is", res.split()[1])
 		
 
 	def syst(self):
@@ -155,6 +168,8 @@ class FTPClient:
 
 	def loop(self):
 		
+		self.first_login()
+		
 		while True:
 			try:
 				inpt = input(self._prompt)
@@ -164,7 +179,7 @@ class FTPClient:
 				cmd, arg = self.tokenizer(inpt)
 				print("cmd:", cmd, ", arg:", arg)
 				for k, v in self._cmds.items():
-					if cmd == k:
+					if cmd == k:						
 						print("Finded:", k, ": ", v)
 				if cmd == "exit":
 					break
@@ -187,8 +202,8 @@ if __name__ == "__main__":
 	ftpclient = FTPClient(host)
 	ftpclient.connect()
 	
-	ftpclient.first_login()
-	# ~ ftpclient.loop()
+	
+	ftpclient.loop()
 	
 	ftpclient.disconnect()
 
