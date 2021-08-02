@@ -9,8 +9,8 @@ class FTPClient:
 	_host = None
 	_timeout = 1
 
-	_cmds = {'ls': 'LIST %s\r\n',
-			'nls': 'NLST %s\r\n',
+	_cmds = {'list': 'LIST %s\r\n',
+			'nlst': 'NLST %s\r\n',
 			'stat': 'STAT\r\n',
 			'syst': 'SYST\r\n',
 			'pasv': 'PASV\r\n',
@@ -45,7 +45,9 @@ class FTPClient:
 		self._send_recv(self._cmds["quit"])
 		self._sock.close()
 
-	def _send(self, msg):
+	def _send(self, msg, verbose=False):
+		if verbose:
+			print("[_send] msg=", msg)
 		return self._sock.send(msg.encode())
 
 	def _recv(self):
@@ -66,11 +68,15 @@ class FTPClient:
 
 		return b''.join(chunks).decode().strip()
 
-	def _send_recv(self, msg, verbose=True):
+	def _send_recv(self, msg, verbose=False):
+		if verbose:
+			print("[_send_recv] msg=", msg)
 		n = self._send(msg)
 		if n > 0:
 			res = self._recv()
 			if verbose:
+				print("[_send_recv] res=", res)
+			else:
 				print(res)
 			return res
 
@@ -85,18 +91,19 @@ class FTPClient:
 				serv = ".".join(serv_port[:4])
 				# Port number a*256+b ... f.e. 39*256+71
 				port = functools.reduce(lambda a, b: int(a)*256+int(b), serv_port[4:])
-				# ~ print("port:", port)
+				# ~ print(serv + ":" + str(port))
 
-				self._send(msg)
+				
 
 				# Connect and receive a message from returned address and port
 				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 				tmp_sock.connect((serv, port))
+				self._send(msg)
 				print(tmp_sock.recv(2048).decode())
 				tmp_sock.close()
 
 				# Receive information message
-				print(self._recv().decode())
+				print(self._recv())
 				return
 
 		print("error occured:", r)
@@ -151,11 +158,11 @@ class FTPClient:
 
 	def list(self, path=""):
 
-		msg = self._cmds["ls"] % path
+		msg = self._cmds["list"] % path
 		self._pasv_transmission(msg)
 
 	def nlst(self, path=""):
-		self._pasv_transmission(self._cmds["nls"] % path)
+		self._pasv_transmission(self._cmds["nlst"] % path)
 
 	def tokenizer(self, string):
 		tokens = string.split()
@@ -177,10 +184,22 @@ class FTPClient:
 					continue
 
 				cmd, arg = self.tokenizer(inpt)
-				print("cmd:", cmd, ", arg:", arg)
 				for k, v in self._cmds.items():
 					if cmd == k:						
-						print("Finded:", k, ": ", v)
+						# ~ print("Finded:", k, ": ", v)
+						method = None
+						try:
+							# Get class method
+							method = getattr(self, k)
+						except AttributeError:
+							print("Class `{}` does not implement `{}`".format(self.__class__.__name__, k))
+							break
+						# Check arguments count
+						if method.__code__.co_argcount > 1: 
+							method(arg)
+						else:
+							method()
+							
 				if cmd == "exit":
 					break
 			except (KeyboardInterrupt, EOFError) as e:
