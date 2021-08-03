@@ -27,10 +27,11 @@ class FTPClient:
 		if host:
 			self._host = host
 	
-	def set_timeout(self, timeout):
+	def set_timeout(self, timeout, verbose=False):
+		if verbose:
+			print("Set timeout to", timeout)
 		self._timeout = timeout
 		self._sock.settimeout(self._timeout)
-		# ~ print("Socket timeout set to", self._timeout)
 
 	def connect(self, host=None):		
 		if host:
@@ -50,32 +51,37 @@ class FTPClient:
 			print("[_send] msg=", msg)
 		return self._sock.send(msg.encode())
 
-	def _recv(self):
+	def _recv(self, verbose=False):
 		chunks = []
 
 		while True:
 			try:
 				chunk = self._sock.recv(2048)
 				chunks.append(chunk)
-				# ~ print("Add chunk:", chunk)
+				if verbose:
+					print("[ {} ] Add chunk: {}".format(sys._getframe().f_code.co_name, chunk))
 				if chunk == b'':
 					# ~ print("Chunk is empty")
+					if verbose:
+						print("[ {} ] Chunk is empty.".format(sys._getframe().f_code.co_name))
 					break
 
 			except socket.timeout:
 				# ~ print("E: Timed out")
+				if verbose:
+					print("[ {} ] Exit: Timed out.".format(sys._getframe().f_code.co_name))
 				break
 
 		return b''.join(chunks).decode().strip()
 
 	def _send_recv(self, msg, verbose=False):
 		if verbose:
-			print("[_send_recv] msg=", msg)
+			print("[ {} ] msg=".format(sys._getframe().f_code.co_name, msg))
 		n = self._send(msg)
 		if n > 0:
-			res = self._recv()
+			res = self._recv(verbose)
 			if verbose:
-				print("[_send_recv] res=", res)
+				print("[ {} ] res={}".format(sys._getframe().f_code.co_name, res))
 			else:
 				print(res)
 			return res
@@ -92,8 +98,6 @@ class FTPClient:
 				# Port number a*256+b ... f.e. 39*256+71
 				port = functools.reduce(lambda a, b: int(a)*256+int(b), serv_port[4:])
 				# ~ print(serv + ":" + str(port))
-
-				
 
 				# Connect and receive a message from returned address and port
 				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -114,47 +118,44 @@ class FTPClient:
 
 
 
-	def login(self, user, passw=""):
-		print("Try login as:", user)
-		if self._send_recv(self._cmds["user"] % user):
-			self._send_recv(self._cmds["pass"] % passw)
-		# msg = f"USER {user}\r\n"
-		# n = self._send(msg)
-		# if n > 0:
-			# print(self._recv().decode())
-			# pswd_cmd = f"PASS {passw}\r\n"
-			# self._send(pswd_cmd)
-			# print(self._recv().decode())
+	# ~ def login(self, user, passw=""):
+		# ~ print("Try login as:", user)
+		# ~ if self._send_recv(self._cmds["user"] % user):
+			# ~ self._send_recv(self._cmds["pass"] % passw)
 
-	def first_login(self):
+	def _first_login(self):
 		user = input("Name: ")
 		
+		self.user(user)
+		
+	def user(self, user):
 		self._send_recv(self._cmds["user"] % user)
 		
 		pswd = getpass.getpass('Password:')
 		
-		if pswd == "" and not user == "anonymous":
-			tmp_timeout = self._timeout
-			self.set_timeout(5)
-		
 		res = self._send_recv(self._cmds["pass"] % pswd)
+	
+		if not res:
+			while True:
+				res = self._recv(True)
+				if res:
+					print(res)					
+					break
+
 		if not res.split()[0] == "230":
 			print("Login failed.")
 			return
-		
-		if pswd == "" and not user == "anonymous":
-			self.set_timeout(tmp_timeout)
-
-		
-		res = self._send_recv(self._cmds["syst"], False)
-		print("Remote system type is", res.split()[1])
-		
 
 	def syst(self):
 		self._send_recv(self._cmds["syst"])
 
 	def stat(self):
-		self._send_recv(self._cmds["stat"])
+		res = self._send_recv(self._cmds["stat"], True)
+		# ~ if res:
+			# ~ while True:
+				# ~ if res == "211 End of status":
+					# ~ break
+				
 
 	def list(self, path=""):
 
@@ -164,7 +165,7 @@ class FTPClient:
 	def nlst(self, path=""):
 		self._pasv_transmission(self._cmds["nlst"] % path)
 
-	def tokenizer(self, string):
+	def _tokenizer(self, string):
 		tokens = string.split()
 		cmd = tokens[0]
 		try:
@@ -175,7 +176,7 @@ class FTPClient:
 
 	def loop(self):
 		
-		self.first_login()
+		self._first_login()
 		
 		while True:
 			try:
@@ -183,7 +184,7 @@ class FTPClient:
 				if not inpt:
 					continue
 
-				cmd, arg = self.tokenizer(inpt)
+				cmd, arg = self._tokenizer(inpt)
 				for k, v in self._cmds.items():
 					if cmd == k:						
 						# ~ print("Finded:", k, ": ", v)
@@ -199,6 +200,7 @@ class FTPClient:
 							method(arg)
 						else:
 							method()
+						break
 							
 				if cmd == "exit":
 					break
@@ -225,110 +227,3 @@ if __name__ == "__main__":
 	ftpclient.loop()
 	
 	ftpclient.disconnect()
-
-	
-	#
-	# ftp_cli = FTPClient()
-	# ftp_cli.connect(host, 21)
-
-	# FTPInterpretator().cmdloop()
-
-	# while True:
-	# 	inpt = input('(ftp)> ').split()
-	#
-	# 	if not inpt:
-	# 		continue
-	#
-	# 	cmd = inpt[0]
-	# 	if cmd == "quit" or cmd == "exit":
-	# 		break
-
-	# while True:
-	# 	try:
-	# 		inpt = input('> ')
-	# 		tokens = inpt.split()
-	#
-	# 		if not tokens:
-	# 			continue
-	#
-	# 		cmd = tokens[0]
-	# 		if cmd == "quit" or cmd == "exit":
-	# 			break
-	# 		elif cmd == "help":
-	# 			# ~ print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
-	# 			# ~ ftp_cli.help()
-	# 			print(ftp_cli._cmds)
-	# 		elif cmd == "login":
-	# 			try:
-	# 				user = tokens[1]
-	# 			except IndexError:
-	# 				print("Usage: login <user> [passwd]")
-	# 				continue
-	#
-	# 			try:
-	# 				passwd = tokens[2]
-	# 			except IndexError:
-	# 				passwd = ""
-	#
-	# 			ftp_cli.login(user, passwd)
-	#
-	# 		elif cmd == "alogin":
-	# 			ftp_cli.login("anonymous")
-	# 		elif cmd == "userlogin":
-	# 			ftp_cli.login("jake", "12345")
-	#
-	# 		elif cmd == "ls":
-	# 			try:
-	# 				s_p = tokens[1]
-	# 			except IndexError:
-	# 				ftp_cli.nlst()
-	# 				continue
-	#
-	# 			if s_p == "-l":
-	# 				try:
-	# 					path = tokens[2]
-	# 				except IndexError:
-	# 					ftp_cli.list()
-	# 					continue
-	# 				else:
-	# 					ftp_cli.list(path)
-	# 			else:
-	# 				ftp_cli.nlst(s_p)
-	#
-	# 		elif cmd == "syst":
-	# 			ftp_cli.syst()
-	# 		elif cmd == "stat":
-	# 			ftp_cli.stat()
-	# 		else:
-	# 			print("Unknown Command")
-	# 			# ~ msg = inpt + "\r\n"
-	# 			# ~ send_msg(sock, msg)
-	# 			# ~ sock.my_send(msg)
-	# 			# ~ r_msg = sock.my_receive()
-	# 			# ~ print(r_msg.decode())
-	#
-	# 		""" For LIST / or NLST /
-	# 					enter to PASV mode
-	# 						create new socket (sock2)
-	# 						send cmd from sock1 and wait for answer
-	# 						connect sock2 to returned port number 39*256+50 f.e.
-	# 						close sock2
-	# 						answer will return to sock1
-	# 					PORT mode
-	# 						listen port number (nc -lvnp 9500) or with socket
-	# 						sock1 send PORT 10,10,10,4,37,28
-	# 						sock1 send cmd
-	# 						sock1 recv answer
-	# 		"""
-	#
-	#
-	#
-	#
-	# 	except (KeyboardInterrupt, EOFError) as e:
-	# 		print("exit")
-	# 		break
-	#
-	# # ~ send_msg(sock, cmds["quit"])
-	# print("Disconnect")
-	# ftp_cli.disconnect()
-	# # ~ sock.disconnect()
