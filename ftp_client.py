@@ -51,7 +51,7 @@ class FTPClient:
 			print("[_send] msg=", msg)
 		return self._sock.send(msg.encode())
 
-	def _recv(self, verbose=False):
+	def _recv(self, end_recv="", verbose=False):
 		chunks = []
 
 		while True:
@@ -74,12 +74,12 @@ class FTPClient:
 
 		return b''.join(chunks).decode().strip()
 
-	def _send_recv(self, msg, verbose=False):
+	def _send_recv(self, msg, end_recv="", verbose=False):
 		if verbose:
 			print("[ {} ] msg=".format(sys._getframe().f_code.co_name, msg))
 		n = self._send(msg)
 		if n > 0:
-			res = self._recv(verbose)
+			res = self._recv(end_recv, verbose)
 			if verbose:
 				print("[ {} ] res={}".format(sys._getframe().f_code.co_name, res))
 			else:
@@ -116,18 +116,6 @@ class FTPClient:
 		# ~ print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
 		self._send_recv(self._cmds["help"])
 
-
-
-	# ~ def login(self, user, passw=""):
-		# ~ print("Try login as:", user)
-		# ~ if self._send_recv(self._cmds["user"] % user):
-			# ~ self._send_recv(self._cmds["pass"] % passw)
-
-	def _first_login(self):
-		user = input("Name: ")
-		
-		self.user(user)
-		
 	def user(self, user):
 		self._send_recv(self._cmds["user"] % user)
 		
@@ -137,7 +125,7 @@ class FTPClient:
 	
 		if not res:
 			while True:
-				res = self._recv(True)
+				res = self._recv(verbose=True)
 				if res:
 					print(res)					
 					break
@@ -150,7 +138,7 @@ class FTPClient:
 		self._send_recv(self._cmds["syst"])
 
 	def stat(self):
-		res = self._send_recv(self._cmds["stat"], True)
+		res = self._send_recv(self._cmds["stat"], verbose=True)
 		# ~ if res:
 			# ~ while True:
 				# ~ if res == "211 End of status":
@@ -176,7 +164,9 @@ class FTPClient:
 
 	def loop(self):
 		
-		self._first_login()
+		user = input("Name: ")
+		
+		self.user(user)
 		
 		while True:
 			try:
@@ -187,7 +177,6 @@ class FTPClient:
 				cmd, arg = self._tokenizer(inpt)
 				for k, v in self._cmds.items():
 					if cmd == k:						
-						# ~ print("Finded:", k, ": ", v)
 						method = None
 						try:
 							# Get class method
