@@ -30,7 +30,7 @@ class FTPClient:
 			'list': 'LIST %s\r\n',	# Returns information of a file or directory if specified, else information of the current working directory is returned.
 			# ~ 'lprt': 'LPRT\r\n',	# Specifies a long address and port to which the server should connect.
 			# ~ 'lpsv': 'LPSV\r\n',	# Enter long passive mode.
-			# ~ 'mdtm': 'MDTM\r\n',	# Return the last-modified time of a specified file.
+# ~ 'mdtm': 'MDTM\r\n',	# Return the last-modified time of a specified file.
 			# ~ 'mcft': 'MFCT\r\n',	# Modify the creation time of a file.
 			# ~ 'mff': 'MFF\r\n',	# Modify fact (the last modification time, creation time, UNIX group/owner/mode of a file).
 			# ~ 'mfmt': 'MFMT\r\n',	# Modify the last modification time of a file.
@@ -51,7 +51,7 @@ class FTPClient:
 			'quit': 'QUIT\r\n',	# Disconnect.
 			# ~ 'rein': 'REIN\r\n',	# Re initializes the connection.
 			# ~ 'rest': 'REST\r\n',	# Restart transfer from the specified point.
-# ~ 'retr': 'RETR\r\n',	# Retrieve a copy of the file
+			'retr': 'RETR %s\r\n',	# Retrieve a copy of the file
 			'rmd': 'RMD %s\r\n',	# Remove a directory.
 			# ~ 'rmda': 'RMDA\r\n',	# Remove a directory tree
 			# ~ 'rnfr': 'RNFR\r\n',	# Rename from.
@@ -143,7 +143,7 @@ class FTPClient:
 				print(res)
 			return res
 
-	def _pasv_transmission(self, msg):
+	def _pasv_transmission(self, msg, verbose=True):
 		# Enter to PASV mode
 		r = self._send_recv(self._cmds["pasv"])
 		if r:
@@ -160,12 +160,14 @@ class FTPClient:
 				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 				tmp_sock.connect((serv, port))
 				self._send(msg)
-				print(tmp_sock.recv(2048).decode())
+				result = tmp_sock.recv(2048).decode()
+				if verbose:
+					print(result)
 				tmp_sock.close()
 
 				# Receive information message
 				print(self._recv())
-				return
+				return result
 
 		print("error occured:", r)
 
@@ -212,6 +214,13 @@ class FTPClient:
 		
 	def pwd(self):
 		self._send_recv(self._cmds["pwd"])
+	
+	def retr(self, f_name):
+		res = self._pasv_transmission(self._cmds["retr"] % f_name, verbose=False)
+		if res:
+			print(len(res),"bytes received")
+			with open(f_name, 'w') as f:
+				f.write(res)
 		
 	def rmd(self, dir_name):
 		self._send_recv(self._cmds["rmd"] % dir_name)
