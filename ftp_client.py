@@ -17,8 +17,8 @@ class FTPClient:
 			# ~ 'ccc': 'CCC\r\n', 	# Clear Command Channel
 			'cdup': 'CDUP\r\n', # Change to Parent Directory.
 			# ~ 'csid': 'CSID\r\n', # Client / Server Identification
-			# ~ 'cwd': 'CWD\r\n',	# Change working directory.
-# ~ 'dele': 'DELE\r\n',	# Delete file.
+			'cwd': 'CWD %s\r\n',	# Change working directory.
+			'dele': 'DELE %s\r\n',	# Delete file.
 # ~ 'dsiz': 'DSIZ\r\n',	# Get the directory size
 			# ~ 'eprt': 'EPRT\r\n',	# Specifies an extended address and port to which the server should connect.
 			# ~ 'epsv': 'EPSV\r\n',	# Enter extended passive mode.
@@ -35,7 +35,7 @@ class FTPClient:
 			# ~ 'mff': 'MFF\r\n',	# Modify fact (the last modification time, creation time, UNIX group/owner/mode of a file).
 			# ~ 'mfmt': 'MFMT\r\n',	# Modify the last modification time of a file.
 			# ~ 'mic': 'MIC\r\n',	# Integrity Protected Command
-# ~ 'mkd': 'MKD\r\n',	# Make directory.
+			'mkd': 'MKD %s\r\n',	# Make directory.
 			# ~ 'mlsd': 'MLSD\r\n',	# Lists the contents of a directory if a directory is named.
 			# ~ 'mlst': 'MLST\r\n',	# Provides data about exactly the object named on its command line, and no others.
 # ~ 'mode': 'MODE\r\n',	# Sets the transfer mode (Stream, Block, or Compressed).
@@ -52,7 +52,7 @@ class FTPClient:
 			# ~ 'rein': 'REIN\r\n',	# Re initializes the connection.
 			# ~ 'rest': 'REST\r\n',	# Restart transfer from the specified point.
 # ~ 'retr': 'RETR\r\n',	# Retrieve a copy of the file
-# ~ 'rmd': 'RMD %s\r\n',	# Remove a directory.
+			'rmd': 'RMD %s\r\n',	# Remove a directory.
 			# ~ 'rmda': 'RMDA\r\n',	# Remove a directory tree
 			# ~ 'rnfr': 'RNFR\r\n',	# Rename from.
 			# ~ 'rnto': 'RNTO\r\n',	# Rename to.
@@ -181,6 +181,12 @@ class FTPClient:
 	def cdup(self):
 		self._send_recv(self._cmds["cdup"])
 	
+	def cwd(self, directory):
+		self._send_recv(self._cmds["cwd"] % directory)
+	
+	def dele(self, f_name):
+		self._send_recv(self._cmds["dele"] % f_name)
+	
 	def feat(self):
 		self._send_recv(self._cmds["feat"])
 
@@ -194,6 +200,9 @@ class FTPClient:
 	def list(self, path=""):
 		msg = self._cmds["list"] % path
 		self._pasv_transmission(msg)
+	
+	def mkd(self, dir_name):
+		self._send_recv(self._cmds["mkd"] % dir_name)
 
 	def nlst(self, path=""):
 		self._pasv_transmission(self._cmds["nlst"] % path)
@@ -203,6 +212,9 @@ class FTPClient:
 		
 	def pwd(self):
 		self._send_recv(self._cmds["pwd"])
+		
+	def rmd(self, dir_name):
+		self._send_recv(self._cmds["rmd"] % dir_name)
 		
 	def size(self, fname):
 		self._send_recv(self._cmds["size"] % fname)
