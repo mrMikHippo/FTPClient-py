@@ -97,7 +97,7 @@ class FTPClient:
 		self._sock.connect((self._host, 21))
 		
 		print("Connected to %s" % self._host)
-		print(self._recv())
+		print(self._recv(self._sock))
 
 	def disconnect(self):
 		self._send_recv(self._cmds["quit"])
@@ -108,12 +108,12 @@ class FTPClient:
 			print("[_send] msg=", msg)
 		return self._sock.send(msg.encode())
 
-	def _recv(self, end_recv="", verbose=False):
+	def _recv(self, sock, end_recv="", verbose=False):
 		chunks = []
 
 		while True:
 			try:
-				chunk = self._sock.recv(2048)
+				chunk = sock.recv(2048)
 				chunks.append(chunk)
 				if verbose:
 					print("[ {} ] Add chunk: {}".format(sys._getframe().f_code.co_name, chunk))
@@ -136,7 +136,7 @@ class FTPClient:
 			print("[ {} ] msg=".format(sys._getframe().f_code.co_name, msg))
 		n = self._send(msg)
 		if n > 0:
-			res = self._recv(end_recv, verbose)
+			res = self._recv(self._sock, end_recv, verbose)
 			if verbose:
 				print("[ {} ] res={}".format(sys._getframe().f_code.co_name, res))
 			else:
@@ -157,16 +157,16 @@ class FTPClient:
 				# ~ print(serv + ":" + str(port))
 
 				# Connect and receive a message from returned address and port
-				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM )
 				tmp_sock.connect((serv, port))
 				self._send(msg)
-				result = tmp_sock.recv(2048).decode()
+				result = self._recv(tmp_sock)
 				if verbose:
 					print(result)
 				tmp_sock.close()
 
 				# Receive information message
-				print(self._recv())
+				print(self._recv(self._sock))
 				return result
 
 		print("error occured:", r)
