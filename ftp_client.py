@@ -3,6 +3,7 @@ import socket
 import functools
 import time
 import getpass
+from threading import Thread
 
 class FTPClient:
 	_prompt = "(ftp)> "
@@ -45,7 +46,7 @@ class FTPClient:
 			'pass': 'PASS %s\r\n',	# Authentication password.
 			'pasv': 'PASV\r\n',	# Enter passive mode.
 			# ~ 'pbsz': 'PBSZ\r\n',	# Protection Buffer Size
-# ~ 'port': 'PORT %s\r\n',	# Specifies an address and port to which the server should connect.
+			'port': 'PORT %s\r\n',	# Specifies an address and port to which the server should connect.
 			# ~ 'prot': 'PROT\r\n',	# Data Channel Protection Level.
 			'pwd': 'PWD\r\n',	# Print working directory. Returns the current directory of the host.
 			'quit': 'QUIT\r\n',	# Disconnect.
@@ -133,7 +134,7 @@ class FTPClient:
 
 	def _send_recv(self, msg, end_recv="", verbose=False):
 		if verbose:
-			print("[ {} ] msg=".format(sys._getframe().f_code.co_name, msg))
+			print("[ {} ] msg={}".format(sys._getframe().f_code.co_name, msg))
 		n = self._send(msg)
 		if n > 0:
 			res = self._recv(self._sock, end_recv, verbose)
@@ -160,6 +161,7 @@ class FTPClient:
 				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM )
 				tmp_sock.connect((serv, port))
 				self._send(msg)
+				
 				result = self._recv(tmp_sock)
 				if verbose:
 					print(result)
@@ -170,7 +172,46 @@ class FTPClient:
 				return result
 
 		print("error occured:", r)
+	
+	def _listening_socket(self, host, port):		
+		with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:				
+			s.bind((host, port))
+			s.listen(1)
+			# ~ print("Listen on {}:{}".format(host, port))
+			conn, addr = s.accept()
+			with conn:
+				# ~ print("Connected by", addr)
+				chunks = []
+				while True:
+					data = conn.recv(1024)
+					if not data: break
+					chunks.append(data)					
+				
+				print(b''.join(chunks).decode().strip())
+					
+			# ~ print("Exit listening")
 
+	def _port_transmission(self, msg, verbose=False):
+		# port 9500 (37*256+28)
+		p = 9500
+		p1 = round(p / 256)
+		p2 = p - p1 * 256
+		hp_addr = '10,10,10,3,{},{}'.format(p1, p2)
+
+		# Enter PORT mode
+		r = self._send_recv(self._cmds["port"] % hp_addr)
+		
+		if r.split()[0] == "200":
+			
+			thread = Thread(target=self._listening_socket, args=('', p))
+			thread.start()
+			
+			self._sock.send(msg.encode())
+			print(self._sock.recv(1024))
+			
+			thread.join()
+			print(self._sock.recv(1024))
+		
 	def acct(self):
 		self._send_recv(self._cmds["acct"])
 	
@@ -305,6 +346,8 @@ class FTPClient:
 					print("Unknown command")
 				if cmd == "exit":
 					break
+				if cmd == "test":
+					self._port_transmission(self._cmds["list"] % '/')
 			except (KeyboardInterrupt, EOFError) as e:
 				print("exit")
 				break
