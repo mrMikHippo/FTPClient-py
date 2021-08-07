@@ -4,12 +4,16 @@ import functools
 import time
 import getpass
 from threading import Thread
+import inspect
 
 class FTPClient:
 	_prompt = "(ftp)> "
-	_host = None
-	_timeout = 1
 
+	# ~ _cmds_2 = {
+		# ~ 'user': 'USER %s\r\n',
+		# ~ 'pass': 'PASS %s\r\n',
+		# ~ 'passive': '',
+	# ~ }
 	_cmds = {
 			'acct': 'ACCT\r\n', # Account information.
 			'adat': 'ADAT\r\n',	# Authentication/Security Data
@@ -79,72 +83,90 @@ class FTPClient:
 			# ~ 'xsen': 'XSEN\r\n',	# Send to terminal 
 			}
 
-	def __init__(self, host=None):
-		self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)		
-		self.set_timeout(self._timeout)
-		if host:
-			self._host = host
-	
-	def set_timeout(self, timeout, verbose=False):
-		if verbose:
-			print("Set timeout to", timeout)
-		self._timeout = timeout
-		self._sock.settimeout(self._timeout)
-
-	def connect(self, host=None):		
-		if host:
-			self._host = host
-
-		self._sock.connect((self._host, 21))
+	def __init__(self, timeout=1, debug=False):
+		self._debug = debug
+		# ~ self._timeout = timeout
 		
-		print("Connected to %s" % self._host)
-		print(self._recv(self._sock))
+		self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)		
+		self.set_timeout(timeout)
+
+	def _debug_print(self, msg):
+		# ~ print("[ {} ] {}={}".format(sys._getframe().f_code.co_name, title, msg))
+		print("[ {} ] {}".format(inspect.stack()[1][3], msg))
+		
+
+	def set_timeout(self, timeout):
+		if self._debug:
+			self._debug_print("Set timeout to " + str(timeout))
+
+		self._sock.settimeout(timeout)
+
+	def connect(self, host):		
+		self._sock.connect((host, 21))
+		
+		print("Connected to %s" % host)
+		print(self._simple_recv())
 
 	def disconnect(self):
-		self._send_recv(self._cmds["quit"])
+		print(self._send_recv(self._cmds["quit"]))
 		self._sock.close()
 
-	def _send(self, msg, verbose=False):
-		if verbose:
-			print("[_send] msg=", msg)
-		return self._sock.send(msg.encode())
+	def _send(self, msg):
+		if self._debug:
+			self._debug_print(msg)
 
-	def _recv(self, sock, end_recv="", verbose=False):
+		return self._sock.send(msg.encode())
+	
+	def _simple_recv(self):
+		msg = self._sock.recv(2048).decode().strip()
+		
+		if self._debug: 
+			self._debug_print(msg)
+		
+		return msg
+		
+
+	def _recv(self, sock):
 		chunks = []
 
 		while True:
 			try:
 				chunk = sock.recv(2048)
 				chunks.append(chunk)
-				if verbose:
-					print("[ {} ] Add chunk: {}".format(sys._getframe().f_code.co_name, chunk))
-				if chunk == b'':
-					# ~ print("Chunk is empty")
-					if verbose:
-						print("[ {} ] Chunk is empty.".format(sys._getframe().f_code.co_name))
+				if self._debug:
+					self._debug_print("Add chunk: " + chunk.decode())
+					# ~ print("[ {} ] Add chunk: {}".format(sys._getframe().f_code.co_name, chunk))
+				if not chunk:
+					if self._debug:
+						self._debug_print("Chunk is empty.")
+						# ~ print("[ {} ] Chunk is empty.".format(sys._getframe().f_code.co_name))
 					break
 
 			except socket.timeout:
-				# ~ print("E: Timed out")
-				if verbose:
-					print("[ {} ] Exit: Timed out.".format(sys._getframe().f_code.co_name))
+				if self._debug:
+					self._debug_print("Exit: Timed out.")
+					# ~ print("[ {} ] Exit: Timed out.".format(sys._getframe().f_code.co_name))
 				break
 
 		return b''.join(chunks).decode().strip()
 
-	def _send_recv(self, msg, end_recv="", verbose=False):
-		if verbose:
-			print("[ {} ] msg={}".format(sys._getframe().f_code.co_name, msg))
+
+
+	def _send_recv(self, msg):
+		if self._debug:
+			self._debug_print(msg)
+			
 		n = self._send(msg)
 		if n > 0:
-			res = self._recv(self._sock, end_recv, verbose)
-			if verbose:
-				print("[ {} ] res={}".format(sys._getframe().f_code.co_name, res))
-			else:
-				print(res)
+			res = self._recv(self._sock)
+			if self._debug:
+				self._debug_print(res)			
+				# ~ print("[ _send_recv ] res={}".format(res))
+			# ~ else:
+				# ~ print(res)
 			return res
 
-	def _pasv_transmission(self, msg, verbose=True):
+	def _pasv_transmission(self, msg):
 		# Enter to PASV mode
 		r = self._send_recv(self._cmds["pasv"])
 		if r:
@@ -162,25 +184,32 @@ class FTPClient:
 				tmp_sock.connect((serv, port))
 				self._send(msg)
 				
-				result = self._recv(tmp_sock)
-				if verbose:
-					print(result)
+				print(self._simple_recv())
+				
+				chunks = []
+				while True:
+					data = tmp_sock.recv(1024)
+					if not data: break
+					chunks.append(data)
+					
+				print(b''.join(chunks).decode().strip())
+				
 				tmp_sock.close()
 
 				# Receive information message
-				print(self._recv(self._sock))
-				return result
+				print(self._simple_recv())
 
-		print("error occured:", r)
 	
-	def _listening_socket(self, host, port):		
+	def _listening_socket(self, host, port, debug):		
 		with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:				
 			s.bind((host, port))
 			s.listen(1)
-			# ~ print("Listen on {}:{}".format(host, port))
+			if debug:
+				print("Listen on {}:{}".format(host, port))
 			conn, addr = s.accept()
 			with conn:
-				# ~ print("Connected by", addr)
+				if debug:
+					print("Connected by", addr)
 				chunks = []
 				while True:
 					data = conn.recv(1024)
@@ -189,9 +218,10 @@ class FTPClient:
 				
 				print(b''.join(chunks).decode().strip())
 					
-			# ~ print("Exit listening")
+			if debug: 
+				print("Exit listening")
 
-	def _port_transmission(self, msg, verbose=False):
+	def _port_transmission(self, msg):
 		# port 9500 (37*256+28)
 		p = 9500
 		p1 = round(p / 256)
@@ -203,7 +233,7 @@ class FTPClient:
 		
 		if r.split()[0] == "200":
 			
-			thread = Thread(target=self._listening_socket, args=('', p))
+			thread = Thread(target=self._listening_socket, args=('', p, self._debug))
 			thread.start()
 			
 			self._sock.send(msg.encode())
@@ -213,48 +243,56 @@ class FTPClient:
 			print(self._sock.recv(1024))
 		
 	def acct(self):
-		self._send_recv(self._cmds["acct"])
+		print(self._send_recv(self._cmds["acct"]))
 	
 	def adat(self):
-		self._send_recv(self._cmds["adat"])
+		print(self._send_recv(self._cmds["adat"]))
 	
 	def avbl(self):
-		self._send_recv(self._cmds["avbl"])
+		print(self._send_recv(self._cmds["avbl"]))
 		
 	def cdup(self):
-		self._send_recv(self._cmds["cdup"])
+		print(self._send_recv(self._cmds["cdup"]))
 	
 	def cwd(self, directory):
-		self._send_recv(self._cmds["cwd"] % directory)
+		print(self._send_recv(self._cmds["cwd"] % directory))
 	
 	def dele(self, f_name):
-		self._send_recv(self._cmds["dele"] % f_name)
+		print(self._send_recv(self._cmds["dele"] % f_name))
 	
 	def feat(self):
-		self._send_recv(self._cmds["feat"])
+		print(self._send_recv(self._cmds["feat"]))
 
 	def help(self):
 		# ~ print("List of Commands: https://en.wikipedia.org/wiki/List_of_FTP_commands")
-		self._send_recv(self._cmds["help"])
+		print(self._send_recv(self._cmds["help"]))
 	
 	def host(self):
-		self._send_recv(self._cmds["host"])
+		print(self._send_recv(self._cmds["host"]))
 	
-	def list(self, path=""):
+	def list(self, path="*"):
 		msg = self._cmds["list"] % path
 		self._pasv_transmission(msg)
 	
 	def mkd(self, dir_name):
-		self._send_recv(self._cmds["mkd"] % dir_name)
+		print(self._send_recv(self._cmds["mkd"] % dir_name))
 
 	def nlst(self, path=""):
 		self._pasv_transmission(self._cmds["nlst"] % path)
 		
 	def noop(self):
-		self._send_recv(self._cmds["noop"])
+		print(self._send_recv(self._cmds["noop"]))		
+	
+	def simple_cmd(self, name, arg=''):
+		cmd = self._cmds[name]
+		if arg:
+			cmd = cmd % arg
+		self._send(cmd)
+		print(self._simple_recv())
+		
 		
 	def pwd(self):
-		self._send_recv(self._cmds["pwd"])
+		print(self._send_recv(self._cmds["pwd"]))
 	
 	def retr(self, f_name):
 		res = self._pasv_transmission(self._cmds["retr"] % f_name, verbose=False)
@@ -280,27 +318,25 @@ class FTPClient:
 					# ~ break
 
 	def user(self, user):
-		self._send_recv(self._cmds["user"] % user)
+		# ~ self.simple_cmd("user", user)
+		print(self._send_recv(self._cmds["user"] % user))
 		
 		pswd = getpass.getpass('Password:')
 		
+		# ~ res = self.simple_cmd("pass", pswd)
 		res = self._send_recv(self._cmds["pass"] % pswd)
-	
+
 		if not res:
 			while True:
 				res = self._recv(verbose=True)
 				if res:
 					print(res)					
 					break
+		print(res)
 
 		if not res.split()[0] == "230":
 			print("Login failed.")
 			return
-
-
-				
-
-
 
 	def _tokenizer(self, string):
 		tokens = string.split()
@@ -311,7 +347,7 @@ class FTPClient:
 			arg = ""
 		return cmd, arg
 
-	def loop(self):
+	def run(self):
 		
 		user = input("Name: ")
 		
@@ -325,29 +361,38 @@ class FTPClient:
 
 				is_cmd = False
 				cmd, arg = self._tokenizer(inpt)
-				for k, v in self._cmds.items():
-					if cmd == k:						
-						method = None
-						try:
-							# Get class method
-							method = getattr(self, k)
-						except AttributeError:
-							print("Class `{}` does not implement `{}`".format(self.__class__.__name__, k))
-							break
-						# Check arguments count
-						if method.__code__.co_argcount > 1: 
-							method(arg)
-						else:
-							method()
-						is_cmd = True
-						break
-
-				if not is_cmd:
-					print("Unknown command")
-				if cmd == "exit":
+				
+				if cmd in self._cmds:
+					simple_cmd(cmd, arg)						
+				elif cmd == "exit":
 					break
-				if cmd == "test":
-					self._port_transmission(self._cmds["list"] % '/')
+				else:
+					print("Unknown command")
+				
+				# ~ for k, v in self._cmds.items():
+					# ~ if cmd == k:						
+						# ~ method = None
+						# ~ try:
+							# ~ # Get class method
+							# ~ method = getattr(self, k)
+						# ~ except AttributeError:
+							# ~ if self._debug:
+								# ~ print("Class `{}` does not implement `{}`".format(self.__class__.__name__, k))
+							# ~ break
+						# ~ # Check arguments count
+						# ~ if method.__code__.co_argcount > 1: 
+							# ~ method(arg)
+						# ~ else:
+							# ~ method()
+						# ~ is_cmd = True
+						# ~ break
+
+				# ~ if not is_cmd:
+					# ~ print("Unknown command")
+				# ~ if cmd == "exit":
+					# ~ break
+				# ~ if cmd == "test":
+					# ~ self._port_transmission(self._cmds["list"] % '/')
 			except (KeyboardInterrupt, EOFError) as e:
 				print("exit")
 				break
@@ -364,10 +409,9 @@ if __name__ == "__main__":
 	
 	host = sys.argv[1]
 	
-	ftpclient = FTPClient(host)
-	ftpclient.connect()
+	ftpclient = FTPClient(debug=True)
+	ftpclient.connect(host)
 	
-	
-	ftpclient.loop()
+	ftpclient.run()
 	
 	ftpclient.disconnect()
