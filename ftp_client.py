@@ -1,6 +1,6 @@
 import os,sys
 import socket
-import functools
+from functools import reduce
 import time
 import getpass
 from threading import Thread
@@ -8,12 +8,8 @@ import inspect
 
 class FTPClient:
 	_prompt = "(ftp)> "
+	_passive_mode = False
 
-	# ~ _cmds_2 = {
-		# ~ 'user': 'USER %s\r\n',
-		# ~ 'pass': 'PASS %s\r\n',
-		# ~ 'passive': '',
-	# ~ }
 	_cmds = {
 			'acct': 'ACCT\r\n', # Account information.
 			'adat': 'ADAT\r\n',	# Authentication/Security Data
@@ -83,12 +79,9 @@ class FTPClient:
 			# ~ 'xsen': 'XSEN\r\n',	# Send to terminal 
 			}
 
-	def __init__(self, timeout=1, debug=False):
+	def __init__(self, debug=False):
 		self._debug = debug
-		# ~ self._timeout = timeout
-		
 		self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)		
-		self.set_timeout(timeout)
 
 	def _debug_print(self, msg):
 		# ~ print("[ {} ] {}={}".format(sys._getframe().f_code.co_name, title, msg))
@@ -168,22 +161,31 @@ class FTPClient:
 
 	def _pasv_transmission(self, msg):
 		# Enter to PASV mode
-		r = self._send_recv(self._cmds["pasv"])
-		if r:
-			# 227 Entering Passive Mode (10,10,10,4,39,71).
-			answ = r.split()
+		# ~ r = self._send_recv(self._cmds["pasv"])
+		self._send('PASV\r\n')
+		r = self._simple_recv()
+		if self._debug:
+			self._debug_print(r)
+		# ~ print(r)
+		answ = r.split()
+		try:
 			if answ[0] == "227":
-				serv_port = answ[-1].strip('().').split(',')
-				serv = ".".join(serv_port[:4])
-				# Port number a*256+b ... f.e. 39*256+71
-				port = functools.reduce(lambda a, b: int(a)*256+int(b), serv_port[4:])
-				# ~ print(serv + ":" + str(port))
-
-				# Connect and receive a message from returned address and port
+				# Build a remote host and port from answer
+				r_conn_data = answ[-1].strip('().').split(',')
+				remote_host = ".".join(r_conn_data[:4])
+				remote_port = reduce(lambda a, b: int(a)*256+int(b), r_conn_data[4:])
+				if self._debug:
+					self._debug_print(f"conn= {r_conn_data}")
+					self._debug_print(f"{remote_host=}")
+					self._debug_print(f"{remote_port=}")
+				
+				# Connect to remote host and receive a message
 				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM )
-				tmp_sock.connect((serv, port))
+				tmp_sock.connect((remote_host, remote_port))
+				
 				self._send(msg)
 				
+				# Receive information message
 				print(self._simple_recv())
 				
 				chunks = []
@@ -198,6 +200,9 @@ class FTPClient:
 
 				# Receive information message
 				print(self._simple_recv())
+				
+		except IndexError:
+			pass
 
 	
 	def _listening_socket(self, host, port, debug):		
@@ -226,21 +231,31 @@ class FTPClient:
 		p = 9500
 		p1 = round(p / 256)
 		p2 = p - p1 * 256
-		hp_addr = '10,10,10,3,{},{}'.format(p1, p2)
+		local_addr = '10,10,10,3,{},{}'.format(p1, p2)
 
 		# Enter PORT mode
-		r = self._send_recv(self._cmds["port"] % hp_addr)
-		
-		if r.split()[0] == "200":
+		self._send('PORT %s\r\n' % local_addr)
+		answ = self._simple_recv().split()
+		print(answ)		
+		if len(answ) > 0:
+			if answ[0] == "200":
 			
-			thread = Thread(target=self._listening_socket, args=('', p, self._debug))
-			thread.start()
+				self._send(msg)
+				resp = self._simple_recv()
+				print(resp)
+				if resp.split()[0] == "425":
+					pass
+				else:
+					thread = Thread(target=self._listening_socket, args=('', p, self._debug))
+					thread.start()
+					
+					print(self._simple_recv())
+				
+					thread.join()
+		else:
+			print("Unknown error")
 			
-			self._sock.send(msg.encode())
-			print(self._sock.recv(1024))
-			
-			thread.join()
-			print(self._sock.recv(1024))
+	
 		
 	def acct(self):
 		print(self._send_recv(self._cmds["acct"]))
@@ -270,10 +285,6 @@ class FTPClient:
 	def host(self):
 		print(self._send_recv(self._cmds["host"]))
 	
-	def list(self, path="*"):
-		msg = self._cmds["list"] % path
-		self._pasv_transmission(msg)
-	
 	def mkd(self, dir_name):
 		print(self._send_recv(self._cmds["mkd"] % dir_name))
 
@@ -284,7 +295,7 @@ class FTPClient:
 		print(self._send_recv(self._cmds["noop"]))		
 	
 	def simple_cmd(self, name, arg=''):
-		cmd = self._cmds[name]
+		cmd = self._cmds_2[name]
 		if arg:
 			cmd = cmd % arg
 		self._send(cmd)
@@ -307,37 +318,52 @@ class FTPClient:
 	def size(self, fname):
 		self._send_recv(self._cmds["size"] % fname)
 
-	def syst(self):
-		self._send_recv(self._cmds["syst"])
-
-	def stat(self):
-		res = self._send_recv(self._cmds["stat"], verbose=True)
-		# ~ if res:
-			# ~ while True:
-				# ~ if res == "211 End of status":
-					# ~ break
+	
 
 	def user(self, user):
-		# ~ self.simple_cmd("user", user)
-		print(self._send_recv(self._cmds["user"] % user))
+		""" Login as user """
+		self._send('USER ' + user + '\r\n')
+		print(self._simple_recv())
 		
 		pswd = getpass.getpass('Password:')
 		
-		# ~ res = self.simple_cmd("pass", pswd)
-		res = self._send_recv(self._cmds["pass"] % pswd)
-
-		if not res:
-			while True:
-				res = self._recv(verbose=True)
-				if res:
-					print(res)					
-					break
+		self._send('PASS ' + pswd + '\r\n')
+		res = self._simple_recv()
 		print(res)
 
 		if not res.split()[0] == "230":
 			print("Login failed.")
 			return
+	
+	def passive(self):
+		""" Toggle passive or port mode """
+		self._passive_mode = not self._passive_mode
+		
+		print("Passive mode:", "On" if self._passive_mode else "Off")
+		
+	def syst(self):
+		self._send('SYST\r\n')
+		print(self._simple_recv())
 
+	def stat(self):
+		self._send('STAT\r\n')
+		
+		# Receive reply
+		chunks = []
+		while True:
+			chunk = self._simple_recv()
+			chunks.append(chunk)
+			if not chunk or "211 End" in chunk:
+				break
+			
+		print(''.join(chunks))
+
+	def ls(self, path="*"):
+		if self._passive_mode:
+			self._port_transmission('LIST %s\r\n' % path)
+		else:
+			self._pasv_transmission('LIST %s\r\n' % path)
+		
 	def _tokenizer(self, string):
 		tokens = string.split()
 		cmd = tokens[0]
@@ -359,40 +385,33 @@ class FTPClient:
 				if not inpt:
 					continue
 
-				is_cmd = False
 				cmd, arg = self._tokenizer(inpt)
 				
-				if cmd in self._cmds:
-					simple_cmd(cmd, arg)						
+				if cmd == "user":
+					self.user(arg)
+				elif cmd == "syst":
+					self.syst()
+				elif cmd == "stat":
+					self.stat()
+				elif cmd == "ls":
+					self.ls(arg)
+				elif cmd == "passive":
+					self.passive()
+				# ~ if cmd in self._cmds_2:
+					# ~ c = self._cmds_2.get(cmd)
+					# ~ if c.get('send'):
+						# ~ if c.get('type'):
+							
+					# ~ else:
+						# ~ method = getattr(self, cmd)
+						# ~ method()
+					
+					# ~ self.simple_cmd(cmd, arg)						
 				elif cmd == "exit":
 					break
 				else:
-					print("Unknown command")
+					print("Unknown command")				
 				
-				# ~ for k, v in self._cmds.items():
-					# ~ if cmd == k:						
-						# ~ method = None
-						# ~ try:
-							# ~ # Get class method
-							# ~ method = getattr(self, k)
-						# ~ except AttributeError:
-							# ~ if self._debug:
-								# ~ print("Class `{}` does not implement `{}`".format(self.__class__.__name__, k))
-							# ~ break
-						# ~ # Check arguments count
-						# ~ if method.__code__.co_argcount > 1: 
-							# ~ method(arg)
-						# ~ else:
-							# ~ method()
-						# ~ is_cmd = True
-						# ~ break
-
-				# ~ if not is_cmd:
-					# ~ print("Unknown command")
-				# ~ if cmd == "exit":
-					# ~ break
-				# ~ if cmd == "test":
-					# ~ self._port_transmission(self._cmds["list"] % '/')
 			except (KeyboardInterrupt, EOFError) as e:
 				print("exit")
 				break
