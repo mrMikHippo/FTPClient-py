@@ -5,6 +5,8 @@ import time
 import getpass
 from threading import Thread
 import inspect
+import random
+from math import floor
 
 class FTPClient:
 	_prompt = "(ftp)> "
@@ -205,53 +207,65 @@ class FTPClient:
 			pass
 
 	
-	def _listening_socket(self, host, port, debug):		
-		with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:				
+	def _listening_socket(self, host, port, debug):
+		with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:
 			s.bind((host, port))
-			s.listen(1)
-			if debug:
-				print("Listen on {}:{}".format(host, port))
+			s.listen()
+			if debug: print("[ {} ] Listen on {}:{}".format(inspect.stack()[0][3], host, port))
+			
 			conn, addr = s.accept()
+			if debug: print("[ {} ] Accepted".format(inspect.stack()[0][3]))
+			
 			with conn:
-				if debug:
-					print("Connected by", addr)
+				if debug: print("[ {} ] Connected by {}".format(inspect.stack()[0][3], addr))
+				
 				chunks = []
-				while True:
+				while True:					
 					data = conn.recv(1024)
-					if not data: break
+					if not data: break					
 					chunks.append(data)					
 				
-				print(b''.join(chunks).decode().strip())
+				if chunks:
+					print(b''.join(chunks).decode().strip())
 					
-			if debug: 
-				print("Exit listening")
+			if debug: print("[ {} ] Exit listening".format(inspect.stack()[0][3]))
 
 	def _port_transmission(self, msg):
 		# port 9500 (37*256+28)
-		p = 9500
-		p1 = round(p / 256)
-		p2 = p - p1 * 256
+		p = 9501
+		p1 = floor(p / 256)
+		p2 = p - p1 * 256		
+		
+		if self._debug:
+			self._debug_print(f"{p = }, {p1 = }, {p2 = }")
+			
 		local_addr = '10,10,10,3,{},{}'.format(p1, p2)
 
 		# Enter PORT mode
 		self._send('PORT %s\r\n' % local_addr)
 		answ = self._simple_recv().split()
-		print(answ)		
+		print(' '.join(answ))	
 		if len(answ) > 0:
 			if answ[0] == "200":
-			
+				
+				# Start listening socket in thread
+				thread = Thread(target=self._listening_socket, args=('', p, self._debug))
+				thread.start()				
+				
 				self._send(msg)
 				resp = self._simple_recv()
 				print(resp)
-				if resp.split()[0] == "425":
-					pass
-				else:
-					thread = Thread(target=self._listening_socket, args=('', p, self._debug))
-					thread.start()
-					
+				if resp.split()[0] == "150":
+					# Receive data
 					print(self._simple_recv())
+				else:
+					# Connecting to given port for getting accepted listening socket in thread
+					with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:
+						s.connect(('', p))			
 				
-					thread.join()
+				thread.join()
+				
+				
 		else:
 			print("Unknown error")
 			
@@ -295,7 +309,7 @@ class FTPClient:
 		print(self._send_recv(self._cmds["noop"]))		
 	
 	def simple_cmd(self, name, arg=''):
-		cmd = self._cmds_2[name]
+		cmd = self._cmds[name]
 		if arg:
 			cmd = cmd % arg
 		self._send(cmd)
@@ -360,9 +374,10 @@ class FTPClient:
 
 	def ls(self, path="*"):
 		if self._passive_mode:
-			self._port_transmission('LIST %s\r\n' % path)
-		else:
 			self._pasv_transmission('LIST %s\r\n' % path)
+		else:
+			self._port_transmission('LIST %s\r\n' % path)
+			
 		
 	def _tokenizer(self, string):
 		tokens = string.split()
