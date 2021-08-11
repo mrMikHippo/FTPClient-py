@@ -20,35 +20,26 @@ class FTPClient:
 		# ~ 'cdup': 'CDUP', # Change to Parent Directory.
 		'cd': 'CWD',	# Change working directory.
 		'rm': 'DELE',	# Delete file.
-		# ~ 'feat': 'FEAT',	# Get the feature list implemented by the server.
 		'mkdir': 'MKD',	# Make directory.
 		'rmdir': 'RMD',	# Remove a directory.
 		'pwd': 'PWD',	# Print working directory. Returns the current directory of the host.
 		'noop': 'NOOP',	# No operation (dummy packet; used mostly on keepalives).
 		'size': 'SIZE',	# Return the size of a file.
-		# ~ 'stat': 'STAT',	# Returns information on the server status, including the status of the current connection
+		'dsiz': 'DSIZ',	# Get the directory size
 		'syst': 'SYST',	# Return system type.
 	}
 	
 	_cmds = {
-# ~ 'acct': 'ACCT\r\n', # Account information.
-# ~ 'adat': 'ADAT\r\n',	# Authentication/Security Data
 			# ~ 'auth': 'AUTH\r\n', # Authentication/Security Mechanism
-# ~ 'avbl': 'AVBL\r\n', # Get the available space
 			# ~ 'ccc': 'CCC\r\n', 	# Clear Command Channel
-# ~ 'cdup': 'CDUP\r\n', # Change to Parent Directory.
 			# ~ 'csid': 'CSID\r\n', # Client / Server Identification
-# ~ 'cwd': 'CWD %s\r\n',	# Change working directory.
-# ~ 'dele': 'DELE %s\r\n',	# Delete file.
 # ~ 'dsiz': 'DSIZ\r\n',	# Get the directory size
 			# ~ 'eprt': 'EPRT\r\n',	# Specifies an extended address and port to which the server should connect.
 			# ~ 'epsv': 'EPSV\r\n',	# Enter extended passive mode.
 # ~ 'feat': 'FEAT\r\n',	# Get the feature list implemented by the server.
-			
 # ~ 'help': 'HELP\r\n',	# Returns usage documentation on a command if specified, else a general help document is returned.
 # ~ 'host': 'HOST\r\n',	# Identify desired virtual host on server, by name.
 			# ~ 'lang': 'LANG\r\n',	# Language Negotiation
-			'list': 'LIST %s\r\n',	# Returns information of a file or directory if specified, else information of the current working directory is returned.
 			# ~ 'lprt': 'LPRT\r\n',	# Specifies a long address and port to which the server should connect.
 			# ~ 'lpsv': 'LPSV\r\n',	# Enter long passive mode.
 # ~ 'mdtm': 'MDTM\r\n',	# Return the last-modified time of a specified file.
@@ -56,39 +47,28 @@ class FTPClient:
 			# ~ 'mff': 'MFF\r\n',	# Modify fact (the last modification time, creation time, UNIX group/owner/mode of a file).
 			# ~ 'mfmt': 'MFMT\r\n',	# Modify the last modification time of a file.
 			# ~ 'mic': 'MIC\r\n',	# Integrity Protected Command
-# ~ 'mkd': 'MKD %s\r\n',	# Make directory.
 			# ~ 'mlsd': 'MLSD\r\n',	# Lists the contents of a directory if a directory is named.
 			# ~ 'mlst': 'MLST\r\n',	# Provides data about exactly the object named on its command line, and no others.
 # ~ 'mode': 'MODE\r\n',	# Sets the transfer mode (Stream, Block, or Compressed).
 # ~ 'nlst': 'NLST %s\r\n',	# Returns a list of file names in a specified directory.
 # ~ 'noop': 'NOOP\r\n',	# No operation (dummy packet; used mostly on keepalives).
 			# ~ 'opts': 'OPTS\r\n',	# Select options for a feature (for example OPTS UTF8 ON).
-			'pass': 'PASS %s\r\n',	# Authentication password.
-			'pasv': 'PASV\r\n',	# Enter passive mode.
 			# ~ 'pbsz': 'PBSZ\r\n',	# Protection Buffer Size
-			'port': 'PORT %s\r\n',	# Specifies an address and port to which the server should connect.
 			# ~ 'prot': 'PROT\r\n',	# Data Channel Protection Level.
-# ~ 'pwd': 'PWD\r\n',	# Print working directory. Returns the current directory of the host.
-# ~ 'quit': 'QUIT\r\n',	# Disconnect.
 			# ~ 'rein': 'REIN\r\n',	# Re initializes the connection.
 			# ~ 'rest': 'REST\r\n',	# Restart transfer from the specified point.
 			'retr': 'RETR %s\r\n',	# Retrieve a copy of the file
-# ~ 'rmd': 'RMD %s\r\n',	# Remove a directory.
 			# ~ 'rmda': 'RMDA\r\n',	# Remove a directory tree
 			# ~ 'rnfr': 'RNFR\r\n',	# Rename from.
 			# ~ 'rnto': 'RNTO\r\n',	# Rename to.
 			# ~ 'site': 'SITE\r\n',	# Sends site specific commands to remote server (like SITE IDLE 60 or SITE UMASK 002). Inspect SITE HELP output for complete list of supported commands.
-# ~ 'size': 'SIZE %s\r\n',	# Return the size of a file.
 			# ~ 'smnt': 'SMNT\r\n',	# Mount file structure.
 			# ~ 'spsv': 'SPSV\r\n',	# FTP Extension Allowing IP Forwarding (NATs) 	Use single port passive mode (only one TCP port number for both control connections and passive-mode data connections)
-# ~ 'stat': 'STAT\r\n',	# Returns information on the server status, including the status of the current connection
 			# ~ 'stor': 'STOR\r\n',	# Accept the data and to store the data as a file at the server site
 			# ~ 'stou': 'STOU\r\n',	# Store file uniquely.
 			# ~ 'stru': 'STRU\r\n',	# Set file transfer structure.
-			'syst': 'SYST\r\n',	# Return system type.
 # ~ 'thmb': 'THMB\r\n',	# Get a thumbnail of a remote image file
 # ~ 'type': 'TYPE %s\r\n',	# Sets the transfer mode (ASCII/Binary).
-# ~ 'user': 'USER %s\r\n',	# Authentication username.
 			# ~ 'xcup': 'XCUP\r\n',	# Change to the parent of the current working directory
 			# ~ 'xmkd': 'XMKD %s\r\n',	# Make a directory
 			# ~ 'xpwd': 'XPWD\r\n',	# Print the current working directory
@@ -121,6 +101,7 @@ class FTPClient:
 		print(self._simple_recv())
 
 	def disconnect(self):
+		""" Disconnect. """
 		print(self._send_recv('QUIT\r\n'))
 		self._sock.close()
 
@@ -181,7 +162,6 @@ class FTPClient:
 
 	def _pasv_transmission(self, msg):
 		# Enter to PASV mode
-		# ~ r = self._send_recv(self._cmds["pasv"])
 		self._send('PASV\r\n')
 		r = self._simple_recv()
 		if self._debug:
@@ -249,6 +229,7 @@ class FTPClient:
 			if debug: print("[ {} ] Exit listening".format(inspect.stack()[0][3]))
 
 	def _port_transmission(self, msg):
+		
 		# port 9500 (37*256+28)
 		p = 9501
 		p1 = floor(p / 256)
@@ -259,7 +240,7 @@ class FTPClient:
 			
 		local_addr = '10,10,10,3,{},{}'.format(p1, p2)
 
-		# Enter PORT mode
+		# Specifies an address and port to which the server should connect.
 		self._send('PORT %s\r\n' % local_addr)
 		answ = self._simple_recv().split()
 		print(' '.join(answ))	
@@ -288,16 +269,9 @@ class FTPClient:
 			print("Unknown error")
 			
 	
-		
-	# ~ def retr(self, f_name):
-		# ~ res = self._pasv_transmission(self._cmds["retr"] % f_name, verbose=False)
-		# ~ if res:
-			# ~ print(len(res),"bytes received")
-			# ~ with open(f_name, 'w') as f:
-				# ~ f.write(res)
-
 	def user(self, user):
-		""" Login as user """
+		""" Authentication """
+		
 		self._send('USER ' + user + '\r\n')
 		print(self._simple_recv())
 		
@@ -318,22 +292,41 @@ class FTPClient:
 		print("Passive mode:", "On" if self._passive_mode else "Off")
 		
 	def status(self):
+		""" 
+			Returns information on the server status, 
+			including the status of the current connection
+		"""
 		print(self._transmit_with_211_end('STAT'))
 	
 	def features(self):
+		""" Get the feature list implemented by the server. """
 		print(self._transmit_with_211_end('FEAT'))		
 
 	def ls(self, path="*"):
+		""" 
+			Returns information of a file or directory if specified, 
+			else information of the current working directory is returned. 
+		"""
 		if self._passive_mode:
 			self._pasv_transmission('LIST %s\r\n' % path)
 		else:
 			self._port_transmission('LIST %s\r\n' % path)
 	
 	def nlist(self, path="*"):
+		"""
+			Returns a list of file names in a specified directory.
+		"""
 		if self._passive_mode:
 			self._pasv_transmission('NLST %s\r\n' % path)
 		else:
 			self._port_transmission('NLST %s\r\n' % path)
+			
+	# ~ def get(self, f_name):
+		# ~ res = self._pasv_transmission(self._cmds["retr"] % f_name, verbose=False)
+		# ~ if res:
+			# ~ print(len(res),"bytes received")
+			# ~ with open(f_name, 'w') as f:
+				# ~ f.write(res)
 	
 	def _simple_transmit(self, cmd, arg=''):
 		if arg:
