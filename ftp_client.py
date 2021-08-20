@@ -159,50 +159,57 @@ class FTPClient:
 			# ~ else:
 				# ~ print(res)
 			return res
+		
+	def _extract_host_and_port(self, msg):
+		cdata = msg.split()[-1].strip('().').split(',')
+		rhost = ".".join(cdata[:4])
+		rport = reduce(lambda a, b: int(a)*256+int(b), cdata[4:])
+		if self._debug:
+					self._debug_print(f"conn= {cdata}")
+					self._debug_print(f"{rhost=}")
+					self._debug_print(f"{rport=}")
+		return rhost, rport
 
-	def _pasv_transmission(self, msg):
+	def _pasv_transmission(self, msg, prnt=True):
 		# Enter to PASV mode
 		self._send('PASV\r\n')
 		r = self._simple_recv()
 		if self._debug:
-			self._debug_print(r)
+			self._debug_print(r.split())
 		# ~ print(r)
-		answ = r.split()
-		try:
-			if answ[0] == "227":
-				# Build a remote host and port from answer
-				r_conn_data = answ[-1].strip('().').split(',')
-				remote_host = ".".join(r_conn_data[:4])
-				remote_port = reduce(lambda a, b: int(a)*256+int(b), r_conn_data[4:])
-				if self._debug:
-					self._debug_print(f"conn= {r_conn_data}")
-					self._debug_print(f"{remote_host=}")
-					self._debug_print(f"{remote_port=}")
-				
-				# Connect to remote host and receive a message
-				tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM )
-				tmp_sock.connect((remote_host, remote_port))
-				
-				self._send(msg)
-				
-				# Receive information message
-				print(self._simple_recv())
-				
-				chunks = []
-				while True:
-					data = tmp_sock.recv(1024)
-					if not data: break
-					chunks.append(data)
-					
+		
+		status_code = self._extract_status_code(r)
+		if status_code == "227":
+			# Build a remote host and port from answer
+			rhost, rport = self._extract_host_and_port(r)
+			
+			# Connect to remote host and receive a message
+			tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM )
+			tmp_sock.connect((rhost, rport))
+			
+			self._send(msg)
+			
+			# Receive information message
+			print(self._simple_recv())
+			
+			chunks = []
+			while True:
+				data = tmp_sock.recv(1024)
+				if not data: break
+				chunks.append(data)
+			
+			if prnt:
 				print(b''.join(chunks).decode().strip())
-				
-				tmp_sock.close()
+			
+			tmp_sock.close()
 
-				# Receive information message
-				print(self._simple_recv())
+			# Receive information message
+			print(self._simple_recv())
+			
+			return b''.join(chunks).decode().strip()
 				
-		except IndexError:
-			pass
+		else:
+			print(r)
 
 	
 	def _listening_socket(self, host, port, debug):
@@ -227,8 +234,21 @@ class FTPClient:
 					print(b''.join(chunks).decode().strip())
 					
 			if debug: print("[ {} ] Exit listening".format(inspect.stack()[0][3]))
+			
+			return "Hoho!"
+			
+	def _extract_status_code(self, msg):
+		arr = msg.split()
+		status_code = -1
+		
+		if arr:
+			status_code = arr[0]		
 
-	def _port_transmission(self, msg):
+		return status_code
+			
+			
+	
+	def _port_transmission(self, msg, prnt=True):
 		
 		# port 9500 (37*256+28)
 		p = 9501
@@ -242,31 +262,35 @@ class FTPClient:
 
 		# Specifies an address and port to which the server should connect.
 		self._send('PORT %s\r\n' % local_addr)
-		answ = self._simple_recv().split()
-		print(' '.join(answ))	
-		if len(answ) > 0:
-			if answ[0] == "200":
+		answ = self._simple_recv()
+		print(answ)
+		
+		status_code = self._extract_status_code(answ)
+		
+		if status_code == "200":
 				
-				# Start listening socket in thread
-				thread = Thread(target=self._listening_socket, args=('', p, self._debug))
-				thread.start()				
+			# Start listening socket in thread
+			thread = Thread(target=self._listening_socket, args=('', p, self._debug))
+			thread.start()				
 				
-				self._send(msg)
-				resp = self._simple_recv()
-				print(resp)
-				if resp.split()[0] == "150":
-					# Receive data
-					print(self._simple_recv())
-				else:
-					# Connecting to given port for getting accepted listening socket in thread
-					with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:
-						s.connect(('', p))			
+			self._send(msg)
+			resp = self._simple_recv()
+			print(resp)
+			res = ""
+			st_code = self._extract_status_code(resp)
+			if st_code == "150":
+				# Receive data
+				print(self._simple_recv())
+			else:
+				# Connecting to given port for getting accepted listening socket in thread
+				with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:
+					s.connect(('', p))			
 				
-				thread.join()
+			thread.join()
 				
-				
-		else:
-			print("Unknown error")
+			return res
+		# ~ else:
+			# ~ print("Unknown error")
 			
 	
 	def user(self, user):
@@ -322,6 +346,13 @@ class FTPClient:
 			self._port_transmission('NLST %s\r\n' % path)
 			
 	# ~ def get(self, f_name):
+		# ~ """ Retrieve file from server """
+		
+		# ~ if self._passive_mode:
+			# ~ res = self._pasv_transmission('RETR %s\r\n' % f_name, prnt=False)
+		# ~ else:
+			# ~ res = self._port_transmission('RETR %s\r\n' % f_name, prnt=False)
+			
 		# ~ res = self._pasv_transmission(self._cmds["retr"] % f_name, verbose=False)
 		# ~ if res:
 			# ~ print(len(res),"bytes received")
@@ -383,6 +414,8 @@ class FTPClient:
 					self.nlist(arg)
 				elif cmd == "passive":
 					self.passive()
+				# ~ elif cmd == "get":
+					# ~ self.get(arg)
 				elif cmd in self._simple_cmds:
 					self._simple_transmit(cmd, arg)
 				# ~ if cmd in self._cmds_2:
