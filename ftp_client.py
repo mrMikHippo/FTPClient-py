@@ -345,19 +345,20 @@ class FTPClient:
 		else:
 			self._port_transmission('NLST %s\r\n' % path)
 			
-	# ~ def get(self, f_name):
-		# ~ """ Retrieve file from server """
+	def get(self, f_name):
+		""" Retrieve file from server """
 		
-		# ~ if self._passive_mode:
-			# ~ res = self._pasv_transmission('RETR %s\r\n' % f_name, prnt=False)
-		# ~ else:
+		if self._passive_mode:
+			res = self._pasv_transmission('RETR %s\r\n' % f_name, prnt=False)
+		else:
+			print("[!] Not Realized yet in PORT mode!")
 			# ~ res = self._port_transmission('RETR %s\r\n' % f_name, prnt=False)
 			
 		# ~ res = self._pasv_transmission(self._cmds["retr"] % f_name, verbose=False)
-		# ~ if res:
-			# ~ print(len(res),"bytes received")
-			# ~ with open(f_name, 'w') as f:
-				# ~ f.write(res)
+		if res:
+			print(len(res),"bytes received")
+			with open(f_name, 'w') as f:
+				f.write(res)
 	
 	def _simple_transmit(self, cmd, arg=''):
 		if arg:
@@ -414,8 +415,8 @@ class FTPClient:
 					self.nlist(arg)
 				elif cmd == "passive":
 					self.passive()
-				# ~ elif cmd == "get":
-					# ~ self.get(arg)
+				elif cmd == "get":
+					self.get(arg)
 				elif cmd in self._simple_cmds:
 					self._simple_transmit(cmd, arg)
 				# ~ if cmd in self._cmds_2:
