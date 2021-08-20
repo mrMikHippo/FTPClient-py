@@ -7,6 +7,7 @@ from threading import Thread
 import inspect
 import random
 from math import floor
+from queue import Queue
 
 class FTPClient:
 	_prompt = "(ftp)> "
@@ -230,12 +231,10 @@ class FTPClient:
 					if not data: break					
 					chunks.append(data)					
 				
-				if chunks:
-					print(b''.join(chunks).decode().strip())
-					
-			if debug: print("[ {} ] Exit listening".format(inspect.stack()[0][3]))
+			if debug: 
+				print("[ {} ] Exit listening".format(inspect.stack()[0][3]))
 			
-			return "Hoho!"
+			return b''.join(chunks).decode().strip()
 			
 	def _extract_status_code(self, msg):
 		arr = msg.split()
@@ -268,18 +267,26 @@ class FTPClient:
 		status_code = self._extract_status_code(answ)
 		
 		if status_code == "200":
+			
+			que = Queue()
 				
 			# Start listening socket in thread
-			thread = Thread(target=self._listening_socket, args=('', p, self._debug))
+			thread = Thread(target=lambda q, host, port, debug: q.put(self._listening_socket(host, port, debug)), args=(que, '', p, self._debug))
 			thread.start()				
 				
 			self._send(msg)
 			resp = self._simple_recv()
 			print(resp)
-			res = ""
+
+			result = str()
 			st_code = self._extract_status_code(resp)
 			if st_code == "150":
-				# Receive data
+				
+				# Receive data				
+				result = que.get()
+				if prnt:
+					print(result)
+
 				print(self._simple_recv())
 			else:
 				# Connecting to given port for getting accepted listening socket in thread
@@ -288,7 +295,7 @@ class FTPClient:
 				
 			thread.join()
 				
-			return res
+			return result
 		# ~ else:
 			# ~ print("Unknown error")
 			
@@ -351,10 +358,8 @@ class FTPClient:
 		if self._passive_mode:
 			res = self._pasv_transmission('RETR %s\r\n' % f_name, prnt=False)
 		else:
-			print("[!] Not Realized yet in PORT mode!")
-			# ~ res = self._port_transmission('RETR %s\r\n' % f_name, prnt=False)
+			res = self._port_transmission('RETR %s\r\n' % f_name, prnt=False)
 			
-		# ~ res = self._pasv_transmission(self._cmds["retr"] % f_name, verbose=False)
 		if res:
 			print(len(res),"bytes received")
 			with open(f_name, 'w') as f:
