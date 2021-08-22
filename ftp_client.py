@@ -8,6 +8,7 @@ import inspect
 import random
 from math import floor
 from queue import Queue
+from netaddr import IPNetwork
 
 class FTPClient:
 	_prompt = "(ftp)> "
@@ -18,7 +19,7 @@ class FTPClient:
 		'acct': 'ACCT', # Account information.
 		'adat': 'ADAT',	# Authentication/Security Data
 		'avbl': 'AVBL', # Get the available space
-		# ~ 'cdup': 'CDUP', # Change to Parent Directory.
+		'cdup': 'CDUP', # Change to Parent Directory.
 		'cd': 'CWD',	# Change working directory.
 		'rm': 'DELE',	# Delete file.
 		'mkdir': 'MKD',	# Make directory.
@@ -82,7 +83,7 @@ class FTPClient:
 
 	def __init__(self, debug=False):
 		self._debug = debug
-		self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)		
+		self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 	def _debug_print(self, msg):
 		# ~ print("[ {} ] {}={}".format(sys._getframe().f_code.co_name, title, msg))
@@ -98,12 +99,28 @@ class FTPClient:
 	def connect(self, host):		
 		self._sock.connect((host, 21))
 		
+		# ~ self._host = host
+		
+		f = os.popen('ifconfig |grep "inet " | awk \'{ print $2 }\'')
+		local_ips = f.read()
+		
+		if self._debug:
+			self._debug_print(local_ips)
+
+		for ip in local_ips.split():
+			if IPNetwork(f"{ip}/24") == IPNetwork(f"{host}/24"):
+				self._local_host = ip
+
+		if self._debug:
+			self._debug_print(f"local ip: {self._local_host}")
+		
 		print("Connected to %s" % host)
 		print(self._simple_recv())
 
 	def disconnect(self):
 		""" Disconnect. """
-		print(self._send_recv('QUIT\r\n'))
+		self._send('QUIT\r\n')
+		print(self._simple_recv())
 		self._sock.close()
 
 	def _send(self, msg):
@@ -147,19 +164,16 @@ class FTPClient:
 
 
 
-	def _send_recv(self, msg):
-		if self._debug:
-			self._debug_print(msg)
+	# ~ def _send_recv(self, msg):
+		# ~ if self._debug:
+			# ~ self._debug_print(msg)
 			
-		n = self._send(msg)
-		if n > 0:
-			res = self._recv(self._sock)
-			if self._debug:
-				self._debug_print(res)			
-				# ~ print("[ _send_recv ] res={}".format(res))
-			# ~ else:
-				# ~ print(res)
-			return res
+		# ~ n = self._send(msg)
+		# ~ if n > 0:
+			# ~ res = self._recv(self._sock)
+			# ~ if self._debug:
+				# ~ self._debug_print(res)
+			# ~ return res
 		
 	def _extract_host_and_port(self, msg):
 		cdata = msg.split()[-1].strip('().').split(',')
@@ -257,7 +271,9 @@ class FTPClient:
 		if self._debug:
 			self._debug_print(f"{p = }, {p1 = }, {p2 = }")
 			
-		local_addr = '10,10,10,3,{},{}'.format(p1, p2)
+		
+		# ~ local_addr = '10,10,10,3,{},{}'.format(p1, p2)
+		local_addr = '{},{},{}'.format(self._local_host.replace('.', ','), p1, p2)
 
 		# Specifies an address and port to which the server should connect.
 		self._send('PORT %s\r\n' % local_addr)
@@ -286,12 +302,14 @@ class FTPClient:
 				result = que.get()
 				if prnt:
 					print(result)
-
+				# ~ que.task_done()
+				# ~ que.join()
 				print(self._simple_recv())
 			else:
 				# Connecting to given port for getting accepted listening socket in thread
-				with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:
-					s.connect(('', p))			
+				with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:					
+					s.connect(('',p))
+					s.close()
 				
 			thread.join()
 				
@@ -366,10 +384,18 @@ class FTPClient:
 				f.write(res)
 	
 	def _simple_transmit(self, cmd, arg=''):
+		
+		s_cmd = self._simple_cmds[cmd]
+		
 		if arg:
-			cmd = self._simple_cmds[cmd] + ' ' + arg
-		cmd += '\r\n'
-		self._send(cmd)
+			s_cmd += ' ' + arg
+
+		s_cmd += '\r\n'
+		
+		if self._debug:
+			self._debug_print(s_cmd)
+
+		self._send(s_cmd)
 		print(self._simple_recv())
 	
 	def _transmit_with_211_end(self, cmd):
