@@ -1,5 +1,7 @@
 import os,sys
 import socket
+import logging
+import click
 from functools import reduce
 import time
 import getpass
@@ -469,15 +471,40 @@ class FTPClient:
 				print("exit")
 				break
 
+logger = logging.getLogger(__name__)
 
+def setuplog(verbose):
+	log_msg_format = "[ %(funcName)s ] %(message)s"
+	logging.basicConfig(format=log_msg_format)
+	if verbose:
+		logger.setLevel(logging.DEBUG)
+	else:
+		logger.setLevel(logging.INFO)
 
-
+@click.command()
+@click.option('--host', help="ftp host address", required=True)
+@click.option('--verbose', help="verbose output", default=False, is_flag=True)
+def start_ftp(host, verbose):
+	
+	setuplog(verbose)
+	
+	print("===================")
+	
+	logger.debug('Debug: This message should go to the log file')
+	logger.info('INFO: So should this')
+	logger.warning('WARNING: And this, too')
+	logger.error('ERROR: And non-ASCII stuff, too, like Øresund and Malmö')
+	
+	print("===================")
 
 if __name__ == "__main__":
 	
 	if len(sys.argv) < 2:
 		print("Usage %s <host>" % sys.argv[0])
 		sys.exit()
+	
+	# ~ start_ftp()
+	# ~ sys.exit()	
 	
 	host = sys.argv[1]
 	
