@@ -83,18 +83,16 @@ class FTPClient:
 			# ~ 'xsen': 'XSEN\r\n',	# Send to terminal 
 			}
 
-	def __init__(self, debug=False):
-		self._debug = debug
+	def __init__(self):
 		self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-	def _debug_print(self, msg):
+	# ~ def _debug_print(self, msg):
 		# ~ print("[ {} ] {}={}".format(sys._getframe().f_code.co_name, title, msg))
-		print("[ {} ] {}".format(inspect.stack()[1][3], msg))
+		# ~ print("[ {} ] {}".format(inspect.stack()[1][3], msg))
 		
 
 	def set_timeout(self, timeout):
-		if self._debug:
-			self._debug_print("Set timeout to " + str(timeout))
+		logger.debug(f"Set timeout to {timeout}")
 
 		self._sock.settimeout(timeout)
 
@@ -106,16 +104,14 @@ class FTPClient:
 		f = os.popen('ifconfig |grep "inet " | awk \'{ print $2 }\'')
 		local_ips = f.read()
 		
-		if self._debug:
-			self._debug_print(local_ips)
+		logger.debug(local_ips)
 
 		for ip in local_ips.split():
 			if IPNetwork(f"{ip}/24") == IPNetwork(f"{host}/24"):
 				self._local_host = ip
 
-		if self._debug:
-			self._debug_print(f"local ip: {self._local_host}")
-		
+		logger.debug(f"local ip: {self._local_host}")
+
 		print("Connected to %s" % host)
 		print(self._simple_recv())
 
@@ -126,17 +122,16 @@ class FTPClient:
 		self._sock.close()
 
 	def _send(self, msg):
-		if self._debug:
-			self._debug_print(msg)
+		
+		logger.debug(msg)
 
 		return self._sock.send(msg.encode())
 	
 	def _simple_recv(self):
 		msg = self._sock.recv(2048).decode().strip()
 		
-		if self._debug: 
-			self._debug_print(msg)
-		
+		logger.debug(msg)
+
 		return msg
 		
 
@@ -147,63 +142,85 @@ class FTPClient:
 			try:
 				chunk = sock.recv(2048)
 				chunks.append(chunk)
-				if self._debug:
-					self._debug_print("Add chunk: " + chunk.decode())
-					# ~ print("[ {} ] Add chunk: {}".format(sys._getframe().f_code.co_name, chunk))
+				
+				logger.debug(f"Add chunk: {chunk.decode()}")
+
 				if not chunk:
-					if self._debug:
-						self._debug_print("Chunk is empty.")
-						# ~ print("[ {} ] Chunk is empty.".format(sys._getframe().f_code.co_name))
+					logger.debug("Chunk is empty.")					
 					break
 
 			except socket.timeout:
-				if self._debug:
-					self._debug_print("Exit: Timed out.")
-					# ~ print("[ {} ] Exit: Timed out.".format(sys._getframe().f_code.co_name))
+				logger.debug("Exit: Timed out.")				
 				break
 
 		return b''.join(chunks).decode().strip()
-
-
-
-	# ~ def _send_recv(self, msg):
-		# ~ if self._debug:
-			# ~ self._debug_print(msg)
-			
-		# ~ n = self._send(msg)
-		# ~ if n > 0:
-			# ~ res = self._recv(self._sock)
-			# ~ if self._debug:
-				# ~ self._debug_print(res)
-			# ~ return res
+	
+	def _simple_transmit(self, cmd, arg=''):
 		
+		s_cmd = self._simple_cmds[cmd]
+		
+		if arg:
+			s_cmd += ' ' + arg
+
+		s_cmd += '\r\n'
+		
+		logger.debug(s_cmd)		
+
+		self._send(s_cmd)
+		print(self._simple_recv())
+	
+	def _transmit_with_211_end(self, cmd):
+		self._send(cmd + '\r\n')
+		
+		# Receive reply
+		chunks = []
+		while True:
+			chunk = self._simple_recv()
+			chunks.append(chunk)
+			if not chunk or "211 End" in chunk:
+				break
+			
+		return ''.join(chunks)
+		
+	def _tokenizer(self, string):
+		tokens = string.split()
+		cmd = tokens[0]
+		try:
+			arg = tokens[1]
+		except IndexError:
+			arg = ""
+		return cmd, arg
+
 	def _extract_host_and_port(self, msg):
+		""" 
+			Extract host and port from received message after PORT command 
+			f.e. (10,10,10,4,27,96)
+		"""
 		cdata = msg.split()[-1].strip('().').split(',')
 		rhost = ".".join(cdata[:4])
 		rport = reduce(lambda a, b: int(a)*256+int(b), cdata[4:])
-		if self._debug:
-					self._debug_print(f"conn= {cdata}")
-					self._debug_print(f"{rhost=}")
-					self._debug_print(f"{rport=}")
+		
+		logger.debug(f"conn= {cdata}\n{rhost=}\n{rport=}")
+		
 		return rhost, rport
 
 	def _pasv_transmission(self, msg, prnt=True):
 		# Enter to PASV mode
 		self._send('PASV\r\n')
 		r = self._simple_recv()
-		if self._debug:
-			self._debug_print(r.split())
-		# ~ print(r)
+		
+		logger.debug(r.split())		
 		
 		status_code = self._extract_status_code(r)
 		if status_code == "227":
 			# Build a remote host and port from answer
 			rhost, rport = self._extract_host_and_port(r)
 			
-			# Connect to remote host and receive a message
+			# Connect to a remote host
 			tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM )
 			tmp_sock.connect((rhost, rport))
 			
+			# Send message
 			self._send(msg)
 			
 			# Receive information message
@@ -233,6 +250,8 @@ class FTPClient:
 		with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:
 			s.bind((host, port))
 			s.listen()
+			
+			# ~ logger.debug(f"Listen on {host}:{port}"
 			if debug: print("[ {} ] Listen on {}:{}".format(inspect.stack()[0][3], host, port))
 			
 			conn, addr = s.accept()
@@ -270,8 +289,7 @@ class FTPClient:
 		p1 = floor(p / 256)
 		p2 = p - p1 * 256		
 		
-		if self._debug:
-			self._debug_print(f"{p = }, {p1 = }, {p2 = }")
+		logger.debug(f"{p = }, {p1 = }, {p2 = }")
 			
 		
 		# ~ local_addr = '10,10,10,3,{},{}'.format(p1, p2)
@@ -289,7 +307,8 @@ class FTPClient:
 			que = Queue()
 				
 			# Start listening socket in thread
-			thread = Thread(target=lambda q, host, port, debug: q.put(self._listening_socket(host, port, debug)), args=(que, '', p, self._debug))
+			thread = Thread(target=lambda q, host, port, debug: q.put(self._listening_socket(host, port, debug)), 
+							args=(que, '', p, logging.getLevelName(logger.level) == 'DEBUG'))
 			thread.start()				
 				
 			self._send(msg)
@@ -309,6 +328,7 @@ class FTPClient:
 				print(self._simple_recv())
 			else:
 				# Connecting to given port for getting accepted listening socket in thread
+				# if status code is not 150
 				with socket.socket(socket.AF_INET, socket.SOCK_STREAM ) as s:					
 					s.connect(('',p))
 					s.close()
@@ -322,7 +342,7 @@ class FTPClient:
 	
 	def user(self, user):
 		""" Authentication """
-		
+
 		self._send('USER ' + user + '\r\n')
 		print(self._simple_recv())
 		
@@ -385,42 +405,7 @@ class FTPClient:
 			with open(f_name, 'w') as f:
 				f.write(res)
 	
-	def _simple_transmit(self, cmd, arg=''):
-		
-		s_cmd = self._simple_cmds[cmd]
-		
-		if arg:
-			s_cmd += ' ' + arg
-
-		s_cmd += '\r\n'
-		
-		if self._debug:
-			self._debug_print(s_cmd)
-
-		self._send(s_cmd)
-		print(self._simple_recv())
 	
-	def _transmit_with_211_end(self, cmd):
-		self._send(cmd + '\r\n')
-		
-		# Receive reply
-		chunks = []
-		while True:
-			chunk = self._simple_recv()
-			chunks.append(chunk)
-			if not chunk or "211 End" in chunk:
-				break
-			
-		return ''.join(chunks)
-		
-	def _tokenizer(self, string):
-		tokens = string.split()
-		cmd = tokens[0]
-		try:
-			arg = tokens[1]
-		except IndexError:
-			arg = ""
-		return cmd, arg
 
 	def run(self):
 		
@@ -474,8 +459,13 @@ class FTPClient:
 logger = logging.getLogger(__name__)
 
 def setuplog(verbose):
-	log_msg_format = "[ %(funcName)s ] %(message)s"
+	if verbose:
+		log_msg_format = "[ %(funcName)s ] %(message)s"
+	else:
+		log_msg_format = "%(message)s"
+		
 	logging.basicConfig(format=log_msg_format)
+	
 	if verbose:
 		logger.setLevel(logging.DEBUG)
 	else:
@@ -488,29 +478,14 @@ def start_ftp(host, verbose):
 	
 	setuplog(verbose)
 	
-	print("===================")
-	
-	logger.debug('Debug: This message should go to the log file')
-	logger.info('INFO: So should this')
-	logger.warning('WARNING: And this, too')
-	logger.error('ERROR: And non-ASCII stuff, too, like Øresund and Malmö')
-	
-	print("===================")
-
-if __name__ == "__main__":
-	
-	if len(sys.argv) < 2:
-		print("Usage %s <host>" % sys.argv[0])
-		sys.exit()
-	
-	# ~ start_ftp()
-	# ~ sys.exit()	
-	
-	host = sys.argv[1]
-	
-	ftpclient = FTPClient(debug=True)
+	ftpclient = FTPClient()
 	ftpclient.connect(host)
 	
 	ftpclient.run()
 	
 	ftpclient.disconnect()
+	
+
+if __name__ == "__main__":
+	start_ftp()
+
