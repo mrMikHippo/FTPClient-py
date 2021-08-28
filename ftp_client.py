@@ -15,6 +15,7 @@ from netaddr import IPNetwork
 class FTPClient:
 	_prompt = "(ftp)> "
 	_passive_mode = False
+	_logger = logging.getLogger(__name__)
 	
 	""" Commands that sends and recieves one line """
 	_simple_cmds = {
@@ -83,16 +84,30 @@ class FTPClient:
 			# ~ 'xsen': 'XSEN\r\n',	# Send to terminal 
 			}
 
-	def __init__(self):
+	def __init__(self, verbose=False):
 		self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		
+		self.setuplog(verbose)
 
 	# ~ def _debug_print(self, msg):
 		# ~ print("[ {} ] {}={}".format(sys._getframe().f_code.co_name, title, msg))
 		# ~ print("[ {} ] {}".format(inspect.stack()[1][3], msg))
+
+	def setuplog(self, verbose):
+		if verbose:
+			log_msg_format = "[ %(funcName)s ] %(message)s"
+		else:
+			log_msg_format = "%(message)s"
+			
+		logging.basicConfig(format=log_msg_format)
 		
+		if verbose:
+			self._logger.setLevel(logging.DEBUG)
+		else:
+			self._logger.setLevel(logging.INFO)
 
 	def set_timeout(self, timeout):
-		logger.debug(f"Set timeout to {timeout}")
+		self._logger.debug(f"Set timeout to {timeout}")
 
 		self._sock.settimeout(timeout)
 
@@ -104,13 +119,13 @@ class FTPClient:
 		f = os.popen('ifconfig |grep "inet " | awk \'{ print $2 }\'')
 		local_ips = f.read()
 		
-		logger.debug(local_ips)
+		self._logger.debug(local_ips)
 
 		for ip in local_ips.split():
 			if IPNetwork(f"{ip}/24") == IPNetwork(f"{host}/24"):
 				self._local_host = ip
 
-		logger.debug(f"local ip: {self._local_host}")
+		self._logger.debug(f"local ip: {self._local_host}")
 
 		print("Connected to %s" % host)
 		print(self._simple_recv())
@@ -123,14 +138,14 @@ class FTPClient:
 
 	def _send(self, msg):
 		
-		logger.debug(msg)
+		self._logger.debug(msg)
 
 		return self._sock.send(msg.encode())
 	
 	def _simple_recv(self):
 		msg = self._sock.recv(2048).decode().strip()
 		
-		logger.debug(msg)
+		self._logger.debug(msg)
 
 		return msg
 		
@@ -143,14 +158,14 @@ class FTPClient:
 				chunk = sock.recv(2048)
 				chunks.append(chunk)
 				
-				logger.debug(f"Add chunk: {chunk.decode()}")
+				self._logger.debug(f"Add chunk: {chunk.decode()}")
 
 				if not chunk:
-					logger.debug("Chunk is empty.")					
+					self._logger.debug("Chunk is empty.")					
 					break
 
 			except socket.timeout:
-				logger.debug("Exit: Timed out.")				
+				self._logger.debug("Exit: Timed out.")				
 				break
 
 		return b''.join(chunks).decode().strip()
@@ -164,7 +179,7 @@ class FTPClient:
 
 		s_cmd += '\r\n'
 		
-		logger.debug(s_cmd)		
+		self._logger.debug(s_cmd)		
 
 		self._send(s_cmd)
 		print(self._simple_recv())
@@ -200,7 +215,7 @@ class FTPClient:
 		rhost = ".".join(cdata[:4])
 		rport = reduce(lambda a, b: int(a)*256+int(b), cdata[4:])
 		
-		logger.debug(f"conn= {cdata}\n{rhost=}\n{rport=}")
+		self._logger.debug(f"conn= {cdata}\n{rhost=}\n{rport=}")
 		
 		return rhost, rport
 
@@ -209,7 +224,7 @@ class FTPClient:
 		self._send('PASV\r\n')
 		r = self._simple_recv()
 		
-		logger.debug(r.split())		
+		self._logger.debug(r.split())		
 		
 		status_code = self._extract_status_code(r)
 		if status_code == "227":
@@ -251,7 +266,7 @@ class FTPClient:
 			s.bind((host, port))
 			s.listen()
 			
-			# ~ logger.debug(f"Listen on {host}:{port}"
+			# ~ self._logger.debug(f"Listen on {host}:{port}"
 			if debug: print("[ {} ] Listen on {}:{}".format(inspect.stack()[0][3], host, port))
 			
 			conn, addr = s.accept()
@@ -289,7 +304,7 @@ class FTPClient:
 		p1 = floor(p / 256)
 		p2 = p - p1 * 256		
 		
-		logger.debug(f"{p = }, {p1 = }, {p2 = }")
+		self._logger.debug(f"{p = }, {p1 = }, {p2 = }")
 			
 		
 		# ~ local_addr = '10,10,10,3,{},{}'.format(p1, p2)
@@ -308,7 +323,7 @@ class FTPClient:
 				
 			# Start listening socket in thread
 			thread = Thread(target=lambda q, host, port, debug: q.put(self._listening_socket(host, port, debug)), 
-							args=(que, '', p, logging.getLevelName(logger.level) == 'DEBUG'))
+							args=(que, '', p, logging.getLevelName(self._logger.level) == 'DEBUG'))
 			thread.start()				
 				
 			self._send(msg)
@@ -456,29 +471,13 @@ class FTPClient:
 				print("exit")
 				break
 
-logger = logging.getLogger(__name__)
-
-def setuplog(verbose):
-	if verbose:
-		log_msg_format = "[ %(funcName)s ] %(message)s"
-	else:
-		log_msg_format = "%(message)s"
-		
-	logging.basicConfig(format=log_msg_format)
-	
-	if verbose:
-		logger.setLevel(logging.DEBUG)
-	else:
-		logger.setLevel(logging.INFO)
-
 @click.command()
 @click.option('--host', help="ftp host address", required=True)
 @click.option('--verbose', help="verbose output", default=False, is_flag=True)
 def start_ftp(host, verbose):
 	
-	setuplog(verbose)
 	
-	ftpclient = FTPClient()
+	ftpclient = FTPClient(verbose)
 	ftpclient.connect(host)
 	
 	ftpclient.run()
